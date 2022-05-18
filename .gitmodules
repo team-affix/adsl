@@ -1,0 +1,9 @@
+[submodule "affix-base"]
+	path = affix-base
+	url = git@github.com:team-affix/affix-base.git
+[submodule "affix-services"]
+	path = affix-services
+	url = git@github.com:team-affix/affix-services.git
+[submodule "aurora"]
+	path = aurora
+	url = git@github.com:team-affix/aurora.git
