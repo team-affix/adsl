@@ -48,6 +48,15 @@ namespace adsl
 		);
 
 		/// <summary>
+		/// Sends all training sets which the remote agent does not have to it.
+		/// </summary>
+		/// <param name="a_remote_client_identity"></param>
+		/// <param name="a_remote_agent_specific_information"></param>
+		void send_desynchronized_training_sets(
+			const std::string& a_remote_client_identity
+		);
+
+		/// <summary>
 		/// Returns a base64 string from a vector of bytes.
 		/// </summary>
 		/// <returns></returns>

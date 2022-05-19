@@ -149,6 +149,55 @@ double agent::get_compute_speed(
 
 }
 
+void agent::send_desynchronized_training_sets(
+	const std::string& a_remote_client_identity
+)
+{
+	// Get map of remote client identities to their associated agents
+	locked_resource l_remote_agents = m_remote_agents.lock();
+
+	// Get the local agent information
+	const_locked_resource l_local_agent_information = m_local_agent_information.m_parsed_agent_specific_information.const_lock();
+
+	auto l_agent_iterator = l_remote_agents->find(a_remote_client_identity);
+
+	// Get the remote agent's parsed information.
+	const_locked_resource l_remote_agent_parsed_information = l_agent_iterator->second->m_parsed_agent_specific_information.const_lock();
+
+	for (int i = 0; i < l_local_agent_information->m_training_set_hashes.size(); i++)
+	{
+		const std::vector<uint8_t>& l_local_hash = l_local_agent_information->m_training_set_hashes.at(i);
+
+		// Try to get an entry for the local training set having been registered with the remote agent.
+		auto l_entry = std::find_if(l_remote_agent_parsed_information->m_training_set_hashes.begin(),
+			l_remote_agent_parsed_information->m_training_set_hashes.end(),
+			[&](const std::vector<uint8_t>& a_hash)
+			{
+				return std::equal(a_hash.begin(), a_hash.end(), l_local_hash.begin(), l_local_hash.end());
+			});
+
+		if (l_entry == l_remote_agent_parsed_information->m_training_set_hashes.end())
+		{
+			// Remote agent DOES NOT have the training set in question.
+
+			training_set l_local_training_set;
+			if (!try_get_training_set(training_set_file_path_from_hash(l_local_hash), l_local_training_set))
+				// Failed to get raw training set from disk
+				continue;
+
+			// Write message to log
+			std::clog << "[ ADSL ] Sending training set to remote agent: " << a_remote_client_identity.substr(50, 10) << std::endl;
+
+			// Send the training set to the remote agent.
+			invoke(a_remote_client_identity, function_types::training_set, l_local_training_set);
+
+
+		}
+
+	}
+
+}
+
 std::string agent::base64_from_bytes(
 	const std::vector<uint8_t>& a_bytes
 )
@@ -266,48 +315,28 @@ void agent::process_remote_agent_training_sets(
 	// Get map of remote client identities to their associated agents
 	locked_resource l_remote_agents = m_remote_agents.lock();
 
-	// Get the local agent information
-	const_locked_resource l_local_agent_information = m_local_agent_information.m_parsed_agent_specific_information.const_lock();
+	// Get distribution lead identity
+	std::string l_distribution_lead_identity = distribution_lead();
 
-	for (auto l_agent_iterator = l_remote_agents->begin(); l_agent_iterator != l_remote_agents->end(); l_agent_iterator++)
+	if (l_distribution_lead_identity == m_local_client.m_local_identity)
 	{
-		// Get the remote agent's parsed information.
-		const_locked_resource l_remote_agent_parsed_information = l_agent_iterator->second->m_parsed_agent_specific_information.const_lock();
+		// If the local agent is the distribution lead, send training sets to all agents
 
-		for (int i = 0; i < l_local_agent_information->m_training_set_hashes.size(); i++)
+		for (auto l_agent_iterator = l_remote_agents->begin(); l_agent_iterator != l_remote_agents->end(); l_agent_iterator++)
 		{
-			const std::vector<uint8_t>& l_local_hash = l_local_agent_information->m_training_set_hashes.at(i);
-
-			// Try to get an entry for the local training set having been registered with the remote agent.
-			auto l_entry = std::find_if(l_remote_agent_parsed_information->m_training_set_hashes.begin(),
-				l_remote_agent_parsed_information->m_training_set_hashes.end(),
-				[&](const std::vector<uint8_t>& a_hash)
-				{
-					return std::equal(a_hash.begin(), a_hash.end(), l_local_hash.begin(), l_local_hash.end());
-				});
-
-			if (l_entry == l_remote_agent_parsed_information->m_training_set_hashes.end())
-			{
-				// Remote agent DOES NOT have the training set in question.
-
-				training_set l_local_training_set;
-				if (!try_get_training_set(training_set_file_path_from_hash(l_local_hash), l_local_training_set))
-					// Failed to get raw training set from disk
-					continue;
-
-				// Write message to log
-				std::clog << "[ ADSL ] Sending training set to remote agent: " << l_agent_iterator->first.substr(50, 10) << std::endl;
-
-				// Send the training set to the remote agent.
-				invoke(l_agent_iterator->first, function_types::training_set, l_local_training_set);
-
-
-			}
-
+			send_desynchronized_training_sets(l_agent_iterator->first);
 		}
 
 	}
+	else
+	{
+		// If the local agent is not the distribution lead, send training sets only to the DL.
 
+		send_desynchronized_training_sets(l_distribution_lead_identity);
+
+	}
+
+	
 }
 
 void agent::on_remote_agent_connect(
