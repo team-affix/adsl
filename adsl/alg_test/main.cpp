@@ -68,6 +68,9 @@ int main(
 			}
 		});
 
+	std::uniform_real_distribution<double> l_urd(-1, 1);
+	std::default_random_engine l_re(25);
+
 	for (int l_message_index = 0; true;)
 	{
 		try
@@ -83,11 +86,13 @@ int main(
 
 		}
 
-		if (l_client_1.fastest_path_to_identity(l_client_0.m_local_identity).size() > 0)
+		/*if (l_client_1.fastest_path_to_identity(l_client_0.m_local_identity).size() > 0)
 		{
-			l_agent_1.invoke<adsl::training_set>(l_client_0.m_local_identity, function_types::training_set, adsl::training_set(aurora::maths::tensor({ 1, 2, 3 }), aurora::maths::tensor({ 1, 2, 3, 4, 5 })));
+			l_agent_1.invoke<adsl::training_set>(l_client_0.m_local_identity, function_types::training_set, adsl::training_set(aurora::maths::tensor::new_1d(10, l_urd, l_re), aurora::maths::tensor::new_1d(10, l_urd, l_re)));
 			l_message_index++;
-		}
+		}*/
+
+		std::vector<training_set> l_training_sets = l_agent_0.get_training_sets();
 
 		if (l_message_index >= 100)
 		{

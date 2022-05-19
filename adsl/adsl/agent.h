@@ -31,6 +31,15 @@ namespace adsl
 			const std::string& a_training_data_folder_path
 		);
 
+		/// <summary>
+		/// Acquires a number of training sets approximately directly proportional to the total number of 
+		/// registered training sets and the normalized local compute speed.
+		/// </summary>
+		/// <returns></returns>
+		std::vector<training_set> get_training_sets(
+
+		);
+
 	protected:
 		/// <summary>
 		/// Loads all training set hashes.
@@ -54,6 +63,23 @@ namespace adsl
 		/// <param name="a_remote_agent_specific_information"></param>
 		void send_desynchronized_training_sets(
 			const std::string& a_remote_client_identity
+		);
+
+		/// <summary>
+		/// Gets the normalized compute speed with respect to all connected adsl agents.
+		/// </summary>
+		/// <returns></returns>
+		double normalized_compute_speed(
+
+		);
+
+		/// <summary>
+		/// Gets the number of files in a given folder.
+		/// </summary>
+		/// <param name="a_folder_path"></param>
+		/// <returns></returns>
+		size_t training_set_count(
+
 		);
 
 		/// <summary>

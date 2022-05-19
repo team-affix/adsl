@@ -81,6 +81,58 @@ agent::agent(
 
 }
 
+std::vector<training_set> agent::get_training_sets(
+
+)
+{
+	const_locked_resource l_agent_specific_information = m_local_agent_information.m_parsed_agent_specific_information.const_lock();
+
+	size_t l_total_training_sets = training_set_count();
+
+	std::vector<training_set> l_result;
+
+	double l_normalized_compute_speed = normalized_compute_speed();
+
+	if (isnan(l_normalized_compute_speed))
+		return l_result;
+
+	size_t l_training_sets_to_digest = (size_t)((double)l_total_training_sets * normalized_compute_speed()) + 1;
+
+	std::vector<size_t> l_training_set_indices;
+
+	CryptoPP::AutoSeededRandomPool l_random;
+
+	for (int i = 0; i < l_training_sets_to_digest; i++)
+	{
+		l_training_set_indices.push_back(l_random.GenerateWord32(0, l_total_training_sets - 1));
+	}
+
+	int i = 0;
+
+	for (auto l_entry : std::filesystem::directory_iterator(m_training_data_folder_path))
+	{
+		if (std::find(l_training_set_indices.begin(), l_training_set_indices.end(), i) != l_training_set_indices.end())
+		{
+			// Import this training set.
+			training_set l_training_set;
+			if (try_get_training_set(l_entry.path().u8string(), l_training_set))
+				// Push the deserialized training set into the vector
+				l_result.push_back(l_training_set);
+
+			if (l_result.size() == l_training_sets_to_digest)
+				// All training sets acquired from storage.
+				break;
+
+		}
+
+		i++;
+
+	}
+
+	return l_result;
+
+}
+
 std::vector<std::vector<uint8_t>> agent::get_training_data_hashes(
 
 )
@@ -196,6 +248,43 @@ void agent::send_desynchronized_training_sets(
 
 	}
 
+}
+
+size_t agent::training_set_count(
+
+)
+{
+	size_t l_result = 0;
+
+	for (auto l_entry : std::filesystem::directory_iterator(m_training_data_folder_path))
+	{
+		l_result++;
+	}
+
+	return l_result;
+
+}
+
+double agent::normalized_compute_speed(
+
+)
+{
+	const_locked_resource l_local_agent_information = m_local_agent_information.m_parsed_agent_specific_information.const_lock();
+
+	double l_total_compute_speed = 0;
+
+	locked_resource l_remote_agents = m_remote_agents.lock();
+
+	for (auto i = l_remote_agents->begin(); i != l_remote_agents->end(); i++)
+	{
+		const_locked_resource l_remote_agent_information = i->second->m_parsed_agent_specific_information.const_lock();
+
+		l_total_compute_speed += l_remote_agent_information->m_compute_speed;
+
+	}
+
+	return l_local_agent_information->m_compute_speed / l_total_compute_speed;
+	
 }
 
 std::string agent::base64_from_bytes(
