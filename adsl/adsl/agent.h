@@ -4,6 +4,7 @@
 #include "agent_specific_information.h"
 #include "function_types.h"
 #include "training_set.h"
+#include "param_vector_update_information.h"
 
 namespace adsl
 {
@@ -42,6 +43,21 @@ namespace adsl
 		/// </summary>
 		affix_base::threading::guarded_resource<std::thread> m_training_set_loading_thread;
 
+		/// <summary>
+		/// Updates waiting to be applied to the parameter vector.
+		/// </summary>
+		affix_base::threading::guarded_resource<std::map<std::string, param_vector_update_information>> m_param_vector_updates;
+
+		/// <summary>
+		/// Callback for when an updated param vector is received.
+		/// </summary>
+		affix_base::threading::guarded_resource<std::function<void(param_vector_information)>> m_synchonize_callback;
+
+		/// <summary>
+		/// A map of times to call certain delayed functions.
+		/// </summary>
+		affix_base::threading::guarded_resource<std::map<uint64_t, std::function<void()>>> m_pending_function_calls;
+
 	public:
 		/// <summary>
 		/// Initializes the agent with the given client.
@@ -52,7 +68,8 @@ namespace adsl
 			const std::string& a_session_identifier,
 			const std::string& a_training_data_folder_path,
 			const size_t& a_iterations_for_compute_speed_test,
-			const size_t& a_allowed_loaded_training_sets_count
+			const size_t& a_allowed_loaded_training_sets_count,
+			const uint64_t& a_refresh_agent_information_interval
 		);
 
 		/// <summary>
@@ -64,7 +81,34 @@ namespace adsl
 
 		);
 
+		/// <summary>
+		/// Updates the param vector.
+		/// </summary>
+		/// <param name="a_param_vector_informaiton"></param>
+		/// <param name="a_update_vector_information"></param>
+		/// <returns></returns>
+		param_vector_information synchronize(
+			const param_vector_information& a_param_vector_informaiton,
+			const param_vector_information& a_update_vector_information
+		);
+
 	protected:
+		/// <summary>
+		/// Waits until the distribution lead is not undefined, and then returns the distribution lead.
+		/// </summary>
+		/// <returns></returns>
+		std::string await_distribution_lead(
+
+		);
+
+		/// <summary>
+		/// Applies relevant updates to the most sophisticated parameter vector.
+		/// </summary>
+		void apply_training_set_updates(
+			std::map<std::string, param_vector_update_information>& a_param_vector_updates,
+			param_vector_information& a_updated_param_vector_information
+		);
+
 		/// <summary>
 		/// Begins an asynchronous loop, which will repeatedly pull random training sets from disk.
 		/// </summary>
@@ -72,6 +116,13 @@ namespace adsl
 
 		);
 
+		/// <summary>
+		/// Begins an asynchonous loop refreshing agent specific information.
+		/// </summary>
+		void begin_refresh_agent_specific_information(
+			const uint64_t& a_refresh_interval,
+			const size_t& a_compute_speed_test_iterations
+		);
 
 		/// <summary>
 		/// Retrieves a random training set from the disk.
@@ -179,6 +230,13 @@ namespace adsl
 		/// Process to see
 		/// </summary>
 		void process_remote_agent_training_sets(
+
+		);
+
+		/// <summary>
+		/// Processes all pending function calls.
+		/// </summary>
+		void process_pending_function_calls(
 
 		);
 

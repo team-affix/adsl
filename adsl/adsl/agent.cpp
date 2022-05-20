@@ -3,6 +3,7 @@
 #include "aurora/pseudo.h"
 #include "aurora/params.h"
 #include "affix-base/stopwatch.h"
+#include "param_vector_update_information.h"
 
 using namespace adsl;
 using affix_base::threading::locked_resource;
@@ -13,7 +14,8 @@ agent::agent(
 	const std::string& a_session_identifier,
 	const std::string& a_training_data_folder_path,
 	const size_t& a_iterations_for_compute_speed_test,
-	const size_t& a_allowed_loaded_training_sets_count
+	const size_t& a_allowed_loaded_training_sets_count,
+	const uint64_t& a_refresh_agent_information_interval
 ) :
 	affix_services::agent<agent_specific_information, function_types>(
 		a_client,
@@ -22,8 +24,12 @@ agent::agent(
 	m_training_data_folder_path(a_training_data_folder_path),
 	m_allowed_loaded_training_sets_count(a_allowed_loaded_training_sets_count)
 {
-	m_remote_invocation_processor.add_function(function_types::training_set,
-		std::function([&](std::string a_remote_client_identity, training_set a_training_set)
+	m_remote_invocation_processor.add_function(
+		function_types::training_set,
+		std::function([&](
+			std::string a_remote_client_identity,
+			training_set a_training_set
+			)
 			{
 				locked_resource l_parsed_agent_information = m_local_agent_information.m_parsed_agent_specific_information.lock();
 
@@ -75,11 +81,69 @@ agent::agent(
 
 			}));
 
+	m_remote_invocation_processor.add_function(
+		function_types::request_synchronize,
+		std::function([&](
+			std::string a_remote_client_identity,
+			param_vector_update_information a_param_vector_update_information
+			)
+			{
+				const_locked_resource l_remote_agents = m_remote_agents.const_lock();
+
+				locked_resource l_param_vector_updates = m_param_vector_updates.lock();
+
+				l_param_vector_updates->insert({ a_remote_client_identity, a_param_vector_update_information });
+
+				if (l_param_vector_updates->size() >= l_remote_agents->size())
+				{
+					param_vector_information l_updated_param_vector;
+
+					// Synchronize all parameter vector updates and apply relevant updates to param vector.
+					apply_training_set_updates(
+						*l_param_vector_updates,
+						l_updated_param_vector
+					);
+
+					for (auto l_agent_iterator = l_remote_agents->begin(); l_agent_iterator != l_remote_agents->end(); l_agent_iterator++)
+					{
+						invoke<param_vector_information>(
+							l_agent_iterator->first,
+							function_types::response_synchronize,
+							l_updated_param_vector
+						);
+					}
+
+					l_param_vector_updates->clear();
+
+				}
+
+			}));
+
+	m_remote_invocation_processor.add_function(
+		function_types::response_synchronize,
+		std::function([&](
+			std::string a_remote_client_identity,
+			param_vector_information a_updated_param_vector_information)
+			{
+				// Get the synchronize callback function
+				locked_resource l_synchronize_callback = m_synchonize_callback.lock();
+
+				if (*l_synchronize_callback == nullptr)
+					// No callback was set.
+					return;
+
+				// Call the synchronize callback.
+				(*l_synchronize_callback)(a_updated_param_vector_information);
+
+				// Delete the callback
+				*l_synchronize_callback = nullptr;
+
+			}));
+
 	locked_resource l_local_agent_information = m_local_agent_information.m_parsed_agent_specific_information.lock();
 
-	// Save information regarding the local agent
-	l_local_agent_information->m_training_set_hashes = get_training_data_hashes();
-	l_local_agent_information->m_compute_speed = get_compute_speed(a_iterations_for_compute_speed_test);
+	// Collect information regarding the agent specific information
+	begin_refresh_agent_specific_information(a_refresh_agent_information_interval, a_iterations_for_compute_speed_test);
 
 	// Begin pulling training sets from disk asynchronously.
 	begin_pull_training_sets_from_disk();
@@ -126,6 +190,91 @@ std::vector<training_set> agent::get_training_set_ration(
 	}
 
 	return l_result;
+
+}
+
+param_vector_information agent::synchronize(
+	const param_vector_information& a_param_vector_informaiton,
+	const param_vector_information& a_update_vector_information
+)
+{
+	param_vector_information l_updated_param_vector_information;
+
+	volatile bool l_callback_completed = false;
+
+	// Set the callback function
+	{
+		locked_resource l_synchronize_callback = m_synchonize_callback.lock();
+		*l_synchronize_callback = [&](param_vector_information a_updated_param_vector_information)
+		{
+			l_updated_param_vector_information = a_updated_param_vector_information;
+			l_callback_completed = true;
+		};
+	}
+
+	// Invoke the update request.
+	invoke<param_vector_information, param_vector_information>(
+		await_distribution_lead(),
+		function_types::request_synchronize,
+		a_param_vector_informaiton,
+		a_update_vector_information
+		);
+
+	// Wait for the callback to complete
+	while (!l_callback_completed);
+
+	return l_updated_param_vector_information;
+
+}
+
+std::string agent::await_distribution_lead(
+
+)
+{
+	while (true)
+	{
+		std::string l_distribution_lead = distribution_lead();
+		if (!l_distribution_lead.empty())
+			return l_distribution_lead;
+	}
+}
+
+void agent::apply_training_set_updates(
+	std::map<std::string, param_vector_update_information>& a_param_vector_updates,
+	param_vector_information& a_updated_param_vector_information
+)
+{
+	param_vector_information l_param_vector_information;
+
+	for (auto i = a_param_vector_updates.begin(); i != a_param_vector_updates.end(); i++)
+	{
+		if (i->second.m_param_vector_information.m_training_sets_digested > l_param_vector_information.m_training_sets_digested)
+		{
+			l_param_vector_information = i->second.m_param_vector_information;
+		}
+	}
+
+	a_updated_param_vector_information = l_param_vector_information;
+	
+	for (auto l_iterator = a_param_vector_updates.begin(); l_iterator != a_param_vector_updates.end(); l_iterator++)
+	{
+		if (std::equal(
+			l_iterator->second.m_param_vector_information.m_param_vector.begin(),
+			l_iterator->second.m_param_vector_information.m_param_vector.end(),
+			l_param_vector_information.m_param_vector.begin(),
+			l_param_vector_information.m_param_vector.end()) &&
+			l_iterator->second.m_param_vector_information.m_training_sets_digested == l_param_vector_information.m_training_sets_digested &&
+			l_iterator->second.m_update_vector_information.m_param_vector.size() == a_updated_param_vector_information.m_param_vector.size())
+		{
+			for (int i = 0; i < a_updated_param_vector_information.m_param_vector.size(); i++)
+			{
+				a_updated_param_vector_information.m_param_vector[i] += 
+					l_iterator->second.m_update_vector_information.m_param_vector[i];
+			}
+			a_updated_param_vector_information.m_training_sets_digested +=
+				l_iterator->second.m_update_vector_information.m_training_sets_digested;
+		}
+	}
 
 }
 
@@ -177,6 +326,36 @@ void agent::begin_pull_training_sets_from_disk(
 
 			}
 		});
+}
+
+void agent::begin_refresh_agent_specific_information(
+	const uint64_t& a_refresh_interval,
+	const size_t& a_compute_speed_test_iterations
+)
+{
+	locked_resource l_agent_specific_information = m_local_agent_information.m_parsed_agent_specific_information.lock();
+
+	std::clog << "[ ADSL ] Performing standardized compute speed test." << std::endl;
+	l_agent_specific_information->m_compute_speed = get_compute_speed(a_compute_speed_test_iterations);
+	std::clog << "[ ADSL ] Absolute compute speed: " << l_agent_specific_information->m_compute_speed << std::endl;
+
+	std::clog << "[ ADSL ] Collecting training set hashes from disk." << std::endl;
+	l_agent_specific_information->m_training_set_hashes = get_training_data_hashes();
+	std::clog << "[ ADSL ] Collected: " << l_agent_specific_information->m_training_set_hashes.size() << " training set hashes from disk." << std::endl;
+
+	// Discloses the agent information now that it's updated.
+	disclose_agent_information();
+
+	locked_resource l_pending_function_calls = m_pending_function_calls.lock();
+
+	l_pending_function_calls->insert({
+		affix_base::timing::utc_time() + a_refresh_interval,
+		[&, a_refresh_interval, a_compute_speed_test_iterations]
+		{
+			begin_refresh_agent_specific_information(a_refresh_interval, a_compute_speed_test_iterations);
+
+		}});
+
 }
 
 bool agent::try_get_random_training_set_from_disk(
@@ -247,8 +426,6 @@ double agent::get_compute_speed(
 	using namespace aurora::models;
 	using namespace aurora::params;
 
-	std::clog << "[ ADSL ] Performing standardized compute speed test." << std::endl;
-
 	Model l_model = pseudo::tnn({ 2, 20, 1 }, pseudo::nlr(0.3));
 	param_vector l_pv;
 	l_model->param_recur(pseudo::param_init(new param_mom(0.02, 0.9), l_pv));
@@ -264,11 +441,9 @@ double agent::get_compute_speed(
 		l_model->bwd();
 	}
 
-	double l_compute_duration = l_stopwatch.duration_milliseconds();
+	double l_compute_duration = l_stopwatch.duration_microseconds();
 
 	double l_compute_speed = ((double)a_iterations) / l_compute_duration;
-
-	std::clog << "[ ADSL ] Absolute compute speed: " << l_compute_speed << std::endl;
 
 	return l_compute_speed;
 
@@ -468,6 +643,7 @@ void agent::agent_specific_process(
 	}
 
 	process_remote_agent_training_sets();
+	process_pending_function_calls();
 
 }
 
@@ -500,6 +676,35 @@ void agent::process_remote_agent_training_sets(
 	}
 
 	
+}
+
+void agent::process_pending_function_calls(
+
+)
+{
+	locked_resource l_pending_function_calls = m_pending_function_calls.lock();
+
+	for (int i = l_pending_function_calls->size() - 1; i >= 0; i--)
+	{
+		// Get an iterator to a position in the map
+		auto l_iterator = l_pending_function_calls->begin();
+		std::advance(l_iterator, i);
+		
+		if (affix_base::timing::utc_time() < l_iterator->first)
+			// Don't run the function, its time has not yet come.
+			continue;
+
+		// Get the function out of the map.
+		std::function<void()> l_function = l_iterator->second;
+
+		// Erase the iterator
+		l_pending_function_calls->erase(l_iterator);
+
+		// Call the function.
+		l_function();
+
+	}
+
 }
 
 void agent::on_remote_agent_connect(
