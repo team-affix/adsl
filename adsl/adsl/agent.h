@@ -20,6 +20,28 @@ namespace adsl
 		/// </summary>
 		affix_base::threading::guarded_resource<bool> m_should_disclose_agent_information = false;
 
+		/// <summary>
+		/// A vector of all training sets that are currently loaded into RAM from the disk.
+		/// (This is not necessarily all of the training sets on disk.)
+		/// </summary>
+		affix_base::threading::guarded_resource<std::vector<training_set>> m_loaded_training_sets;
+
+		/// <summary>
+		/// Boolean describing whether or not the agent should continue loading random training sets from disk / offloading old ones.
+		/// </summary>
+		affix_base::threading::guarded_resource<bool> m_continue_loading_training_sets;
+
+		/// <summary>
+		/// Defines the minimum AND maximum number of training sets allowed to be loaded at any one time.
+		/// </summary>
+		affix_base::threading::guarded_resource<size_t> m_allowed_loaded_training_sets_count;
+
+		/// <summary>
+		/// The thread on which asynchonous loading from disk to memory of the 
+		/// training sets is occuring.
+		/// </summary>
+		affix_base::threading::guarded_resource<std::thread> m_training_set_loading_thread;
+
 	public:
 		/// <summary>
 		/// Initializes the agent with the given client.
@@ -28,7 +50,9 @@ namespace adsl
 		agent(
 			affix_services::client& a_client,
 			const std::string& a_session_identifier,
-			const std::string& a_training_data_folder_path
+			const std::string& a_training_data_folder_path,
+			const size_t& a_iterations_for_compute_speed_test,
+			const size_t& a_allowed_loaded_training_sets_count
 		);
 
 		/// <summary>
@@ -36,11 +60,27 @@ namespace adsl
 		/// registered training sets and the normalized local compute speed.
 		/// </summary>
 		/// <returns></returns>
-		std::vector<training_set> get_training_sets(
+		std::vector<training_set> get_training_set_ration(
 
 		);
 
 	protected:
+		/// <summary>
+		/// Begins an asynchronous loop, which will repeatedly pull random training sets from disk.
+		/// </summary>
+		void begin_pull_training_sets_from_disk(
+
+		);
+
+
+		/// <summary>
+		/// Retrieves a random training set from the disk.
+		/// </summary>
+		/// <returns></returns>
+		bool try_get_random_training_set_from_disk(
+			training_set& a_output
+		);
+
 		/// <summary>
 		/// Loads all training set hashes.
 		/// </summary>
@@ -78,7 +118,7 @@ namespace adsl
 		/// </summary>
 		/// <param name="a_folder_path"></param>
 		/// <returns></returns>
-		size_t training_set_count(
+		size_t training_sets_on_disk_count(
 
 		);
 

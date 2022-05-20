@@ -23,13 +23,6 @@ int main(
 	l_client_configuration_0->import_resource();
 	l_client_configuration_0->export_resource();
 
-	affix_base::data::ptr<affix_services::client_configuration>
-		l_client_configuration_1(new affix_services::client_configuration("config/client_configuration_1.json"));
-
-	l_client_configuration_1->import_resource();
-	l_client_configuration_1->export_resource();
-
-
 	affix_services::client l_client_0(l_io_context,
 		l_client_configuration_0);
 
@@ -38,21 +31,8 @@ int main(
 		fs::create_directory("training_data_0/");
 	}
 
-	agent l_agent_0(l_client_0, "example-session-0", "training_data_0/");
+	agent l_agent_0(l_client_0, "example-session-0", "training_data_0/", 10000, 1000);
 	l_agent_0.disclose_agent_information();
-
-
-	affix_services::client l_client_1(l_io_context,
-		l_client_configuration_1);
-
-	if (!fs::exists("training_data_1/"))
-	{
-		fs::create_directory("training_data_1/");
-	}
-
-	agent l_agent_1(l_client_1, "example-session-0", "training_data_1/");
-	l_agent_1.disclose_agent_information();
-
 
 	// Boolean describing whether the context thread should continue
 	bool l_context_thread_continue = true;
@@ -76,10 +56,7 @@ int main(
 		try
 		{
 			l_client_0.process();
-			l_client_1.process();
-
 			l_agent_0.process();
-			l_agent_1.process();
 		}
 		catch (std::exception a_exception)
 		{
@@ -92,18 +69,8 @@ int main(
 			l_message_index++;
 		}*/
 
-		std::vector<training_set> l_training_sets = l_agent_0.get_training_sets();
-
-		if (l_message_index >= 100)
-		{
-			affix_base::threading::locked_resource l_authenticated_connections = l_client_1.m_authenticated_connections.lock();
-
-			for (int i = l_authenticated_connections->size() - 1; i >= 0; i--)
-			{
-				l_authenticated_connections->at(i)->close();
-			}
-
-		}
+		/*std::cout << "Getting TRAINING SETS" << std::endl;
+		std::vector<training_set> l_training_sets = l_agent_0.get_training_set_ration();*/
 
 	}
 

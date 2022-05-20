@@ -11,13 +11,16 @@ using affix_base::threading::const_locked_resource;
 agent::agent(
 	affix_services::client& a_client,
 	const std::string& a_session_identifier,
-	const std::string& a_training_data_folder_path
+	const std::string& a_training_data_folder_path,
+	const size_t& a_iterations_for_compute_speed_test,
+	const size_t& a_allowed_loaded_training_sets_count
 ) :
 	affix_services::agent<agent_specific_information, function_types>(
 		a_client,
 		"adsl-" + a_session_identifier,
 		agent_specific_information()),
-	m_training_data_folder_path(a_training_data_folder_path)
+	m_training_data_folder_path(a_training_data_folder_path),
+	m_allowed_loaded_training_sets_count(a_allowed_loaded_training_sets_count)
 {
 	m_remote_invocation_processor.add_function(function_types::training_set,
 		std::function([&](std::string a_remote_client_identity, training_set a_training_set)
@@ -42,8 +45,7 @@ agent::agent(
 				*l_should_disclose_agent_information = true;
 
 				// Create file name based off of training set hash
-				std::string l_base64_encoded = base64_from_bytes(l_hash);
-				std::string l_training_set_file_path = m_training_data_folder_path + "/" + l_base64_encoded;
+				std::string l_training_set_file_path = training_set_file_path_from_hash(l_hash);
 
 				// Open a file output stream
 				std::ofstream l_ofs(l_training_set_file_path, std::ios::out | std::ios::binary | std::ios::beg);
@@ -69,7 +71,7 @@ agent::agent(
 				l_parsed_agent_information->m_training_set_hashes.push_back(l_hash);
 
 				// Log the fact that we received a new training set.
-				std::clog << "[ ADSL ] Received training set; (b64 hash substring): " << l_base64_encoded << std::endl;
+				std::clog << "[ ADSL ] Received training set; " << l_training_set_file_path << std::endl;
 
 			}));
 
@@ -77,59 +79,130 @@ agent::agent(
 
 	// Save information regarding the local agent
 	l_local_agent_information->m_training_set_hashes = get_training_data_hashes();
-	l_local_agent_information->m_compute_speed = get_compute_speed(100000);
+	l_local_agent_information->m_compute_speed = get_compute_speed(a_iterations_for_compute_speed_test);
+
+	// Begin pulling training sets from disk asynchronously.
+	begin_pull_training_sets_from_disk();
 
 }
 
-std::vector<training_set> agent::get_training_sets(
+std::vector<training_set> agent::get_training_set_ration(
 
 )
 {
-	const_locked_resource l_agent_specific_information = m_local_agent_information.m_parsed_agent_specific_information.const_lock();
+	// Get the vector of all training sets that are loaded into memory.
+	const_locked_resource l_loaded_training_sets = m_loaded_training_sets.const_lock();
 
-	size_t l_total_training_sets = training_set_count();
+	size_t l_allowed_loaded_training_sets_count = 0;
+
+	{
+		// Get the singular number of training sets allowed to occupy the loaded training sets buffer.
+		const_locked_resource l_allowed_loaded_training_sets_count_resource = m_allowed_loaded_training_sets_count.const_lock();
+		l_allowed_loaded_training_sets_count = *l_allowed_loaded_training_sets_count_resource;
+	}
 
 	std::vector<training_set> l_result;
+
+	if (l_loaded_training_sets->size() != l_allowed_loaded_training_sets_count)
+		// Return an empty vector of training sets, since the training sets have not yet been fully loaded from disk.
+		return l_result;
+
+	// Get the total number of training sets to digest.
+	size_t l_training_sets_to_digest = (size_t)((double)l_loaded_training_sets->size() * normalized_compute_speed());
+
 
 	double l_normalized_compute_speed = normalized_compute_speed();
 
 	if (isnan(l_normalized_compute_speed))
 		return l_result;
 
-	size_t l_training_sets_to_digest = (size_t)((double)l_total_training_sets * normalized_compute_speed()) + 1;
-
-	std::vector<size_t> l_training_set_indices;
-
+	// Construct a random number generator
 	CryptoPP::AutoSeededRandomPool l_random;
 
 	for (int i = 0; i < l_training_sets_to_digest; i++)
 	{
-		l_training_set_indices.push_back(l_random.GenerateWord32(0, l_total_training_sets - 1));
+		size_t l_training_set_index = l_random.GenerateWord32(0, l_loaded_training_sets->size() - 1);
+		l_result.push_back(l_loaded_training_sets->at(l_training_set_index));
 	}
+
+	return l_result;
+
+}
+
+void agent::begin_pull_training_sets_from_disk(
+
+)
+{
+	locked_resource l_continue = m_continue_loading_training_sets.lock();
+
+	// Set the continuing state to true
+	*l_continue = true;
+
+	locked_resource l_training_set_loading_thread = m_training_set_loading_thread.lock();
+
+	 *l_training_set_loading_thread = std::thread(
+		[&]
+		{
+			while (true)
+			{
+				// Lock the resource describing whether or not we should continue
+				const_locked_resource l_should_continue = m_continue_loading_training_sets.const_lock();
+
+				if (!*l_should_continue)
+					// Quit the thread if it should happen.
+					return;
+
+
+				locked_resource l_loaded_training_sets = m_loaded_training_sets.lock();
+
+				size_t l_allowable_loaded_training_sets_count = 0;
+
+				{
+					// Lock the resource describing whether or not we should continue
+					const_locked_resource l_allowable_loaded_training_sets_count_resource = m_allowed_loaded_training_sets_count.const_lock();
+					l_allowable_loaded_training_sets_count = *l_allowable_loaded_training_sets_count_resource;
+				}
+
+				training_set l_training_set;
+					
+				if (!try_get_random_training_set_from_disk(l_training_set))
+					// Do nothing, since we were unable to load the training set.
+					continue;
+
+				l_loaded_training_sets->push_back(l_training_set);
+
+				if (l_loaded_training_sets->size() > l_allowable_loaded_training_sets_count)
+					// If there are too many training sets loaded, erase one at the beginning to return to maximum capacity.
+					l_loaded_training_sets->erase(l_loaded_training_sets->begin());
+
+			}
+		});
+}
+
+bool agent::try_get_random_training_set_from_disk(
+	training_set& a_output
+)
+{
+	size_t l_total_training_sets = training_sets_on_disk_count();
+
+	CryptoPP::AutoSeededRandomPool l_random;
+
+	size_t l_training_set_index = l_random.GenerateWord32(0, l_total_training_sets - 1);
 
 	int i = 0;
 
 	for (auto l_entry : std::filesystem::directory_iterator(m_training_data_folder_path))
 	{
-		if (std::find(l_training_set_indices.begin(), l_training_set_indices.end(), i) != l_training_set_indices.end())
+		if (i != l_training_set_index)
 		{
-			// Import this training set.
-			training_set l_training_set;
-			if (try_get_training_set(l_entry.path().u8string(), l_training_set))
-				// Push the deserialized training set into the vector
-				l_result.push_back(l_training_set);
-
-			if (l_result.size() == l_training_sets_to_digest)
-				// All training sets acquired from storage.
-				break;
-
+			i++;
+			continue;
 		}
-
-		i++;
+		
+		// Import this training set.
+		return try_get_training_set(l_entry.path().u8string(), a_output);
 
 	}
-
-	return l_result;
 
 }
 
@@ -238,7 +311,7 @@ void agent::send_desynchronized_training_sets(
 				continue;
 
 			// Write message to log
-			std::clog << "[ ADSL ] Sending training set to remote agent: " << a_remote_client_identity.substr(50, 10) << std::endl;
+			std::clog << "[ ADSL ] Sending training set to remote agent: " << a_remote_client_identity.substr(50, 10) << "; hash: " << base64_from_bytes(l_local_hash) << std::endl;
 
 			// Send the training set to the remote agent.
 			invoke(a_remote_client_identity, function_types::training_set, l_local_training_set);
@@ -250,7 +323,7 @@ void agent::send_desynchronized_training_sets(
 
 }
 
-size_t agent::training_set_count(
+size_t agent::training_sets_on_disk_count(
 
 )
 {
@@ -303,7 +376,8 @@ std::string agent::training_set_file_path_from_hash(
 	const std::vector<uint8_t>& a_hash
 )
 {
-	return m_training_data_folder_path + "/" + base64_from_bytes(a_hash);
+
+	return m_training_data_folder_path + "/" + affix_base::data::string_trim(base64_from_bytes(a_hash), {'\\','/',':','*','?','\"','<','>','|'});
 }
 
 bool agent::try_get_training_set(
