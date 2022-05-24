@@ -12,36 +12,19 @@ namespace adsl
 	{
 	protected:
 		/// <summary>
-		/// Path to the file of the training data store.
+		/// Path to the folder of the training data store.
 		/// </summary>
 		std::string m_training_data_folder_path;
+
+		/// <summary>
+		/// Path to the file which contains local param vector information.
+		/// </summary>
+		std::string m_param_vector_information_path;
 
 		/// <summary>
 		/// Boolean suggesting whether or not we should disclose the local agent information.
 		/// </summary>
 		affix_base::threading::guarded_resource<bool> m_should_disclose_agent_information = false;
-
-		/// <summary>
-		/// A vector of all training sets that are currently loaded into RAM from the disk.
-		/// (This is not necessarily all of the training sets on disk.)
-		/// </summary>
-		affix_base::threading::guarded_resource<std::vector<training_set>> m_loaded_training_sets;
-
-		/// <summary>
-		/// Boolean describing whether or not the agent should continue loading random training sets from disk / offloading old ones.
-		/// </summary>
-		affix_base::threading::guarded_resource<bool> m_continue_loading_training_sets;
-
-		/// <summary>
-		/// Defines the minimum AND maximum number of training sets allowed to be loaded at any one time.
-		/// </summary>
-		affix_base::threading::guarded_resource<size_t> m_allowed_loaded_training_sets_count;
-
-		/// <summary>
-		/// The thread on which asynchonous loading from disk to memory of the 
-		/// training sets is occuring.
-		/// </summary>
-		affix_base::threading::guarded_resource<std::thread> m_training_set_loading_thread;
 
 		/// <summary>
 		/// Updates waiting to be applied to the parameter vector.
@@ -66,19 +49,44 @@ namespace adsl
 		agent(
 			affix_services::client& a_client,
 			const std::string& a_session_identifier,
+			const std::string& a_param_vector_information_path,
 			const std::string& a_training_data_folder_path,
 			const size_t& a_iterations_for_compute_speed_test,
-			const size_t& a_allowed_loaded_training_sets_count,
 			const uint64_t& a_refresh_agent_information_interval
 		);
 
 		/// <summary>
-		/// Acquires a number of training sets approximately directly proportional to the total number of 
-		/// registered training sets and the normalized local compute speed.
+		/// Returns the number of training sets that should be digested by the local executable in each epoch.
 		/// </summary>
 		/// <returns></returns>
-		std::vector<training_set> get_training_set_ration(
+		size_t training_sets_to_digest_count(
 
+		);
+
+		/// <summary>
+		/// Retrieves a random training set from the disk.
+		/// </summary>
+		/// <returns></returns>
+		bool try_get_random_training_set_from_disk(
+			training_set& a_output
+		);
+
+		/// <summary>
+		/// Attempts to retrieve information about the param vector from local LTS.
+		/// </summary>
+		/// <param name="a_param_vector_information"></param>
+		/// <returns></returns>
+		bool try_get_param_vector_information_from_disk(
+			param_vector_information& a_param_vector_information
+		);
+
+		/// <summary>
+		/// Attempts to write the local param vector information to disk.
+		/// </summary>
+		/// <param name="a_param_vector_information"></param>
+		/// <returns></returns>
+		bool try_set_param_vector_information_in_disk(
+			const param_vector_information& a_param_vector_information
 		);
 
 		/// <summary>
@@ -88,8 +96,15 @@ namespace adsl
 		/// <param name="a_update_vector_information"></param>
 		/// <returns></returns>
 		param_vector_information synchronize(
-			const param_vector_information& a_param_vector_informaiton,
-			const param_vector_information& a_update_vector_information
+			const param_vector_update_information& a_param_vector_update_informaiton
+		);
+
+		/// <summary>
+		/// Gets the normalized compute speed with respect to all connected adsl agents.
+		/// </summary>
+		/// <returns></returns>
+		double normalized_compute_speed(
+
 		);
 
 	protected:
@@ -104,16 +119,9 @@ namespace adsl
 		/// <summary>
 		/// Applies relevant updates to the most sophisticated parameter vector.
 		/// </summary>
-		void apply_training_set_updates(
+		void apply_param_vector_updates(
 			std::map<std::string, param_vector_update_information>& a_param_vector_updates,
 			param_vector_information& a_updated_param_vector_information
-		);
-
-		/// <summary>
-		/// Begins an asynchronous loop, which will repeatedly pull random training sets from disk.
-		/// </summary>
-		void begin_pull_training_sets_from_disk(
-
 		);
 
 		/// <summary>
@@ -125,11 +133,12 @@ namespace adsl
 		);
 
 		/// <summary>
-		/// Retrieves a random training set from the disk.
+		/// Retrieves the compute speed of the local machine by way of conducting a standardized test.
 		/// </summary>
+		/// <param name="a_iterations"></param>
 		/// <returns></returns>
-		bool try_get_random_training_set_from_disk(
-			training_set& a_output
+		double get_compute_speed(
+			const size_t& a_iterations
 		);
 
 		/// <summary>
@@ -140,28 +149,12 @@ namespace adsl
 		);
 
 		/// <summary>
-		/// Returns a standardized compute frequency for this machine.
-		/// </summary>
-		/// <returns></returns>
-		double get_compute_speed(
-			const size_t& a_iterations
-		);
-
-		/// <summary>
 		/// Sends all training sets which the remote agent does not have to it.
 		/// </summary>
 		/// <param name="a_remote_client_identity"></param>
 		/// <param name="a_remote_agent_specific_information"></param>
 		void send_desynchronized_training_sets(
 			const std::string& a_remote_client_identity
-		);
-
-		/// <summary>
-		/// Gets the normalized compute speed with respect to all connected adsl agents.
-		/// </summary>
-		/// <returns></returns>
-		double normalized_compute_speed(
-
 		);
 
 		/// <summary>

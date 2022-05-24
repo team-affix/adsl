@@ -4,6 +4,7 @@
 #include "aurora/params.h"
 #include "affix-base/stopwatch.h"
 #include "param_vector_update_information.h"
+#include "affix-base/files.h"
 
 using namespace adsl;
 using affix_base::threading::locked_resource;
@@ -12,17 +13,17 @@ using affix_base::threading::const_locked_resource;
 agent::agent(
 	affix_services::client& a_client,
 	const std::string& a_session_identifier,
+	const std::string& a_param_vector_information_path,
 	const std::string& a_training_data_folder_path,
 	const size_t& a_iterations_for_compute_speed_test,
-	const size_t& a_allowed_loaded_training_sets_count,
 	const uint64_t& a_refresh_agent_information_interval
 ) :
 	affix_services::agent<agent_specific_information, function_types>(
 		a_client,
 		"adsl-" + a_session_identifier,
 		agent_specific_information()),
-	m_training_data_folder_path(a_training_data_folder_path),
-	m_allowed_loaded_training_sets_count(a_allowed_loaded_training_sets_count)
+	m_param_vector_information_path(a_param_vector_information_path),
+	m_training_data_folder_path(a_training_data_folder_path)
 {
 	m_remote_invocation_processor.add_function(
 		function_types::training_set,
@@ -99,7 +100,7 @@ agent::agent(
 					param_vector_information l_updated_param_vector;
 
 					// Synchronize all parameter vector updates and apply relevant updates to param vector.
-					apply_training_set_updates(
+					apply_param_vector_updates(
 						*l_param_vector_updates,
 						l_updated_param_vector
 					);
@@ -145,57 +146,87 @@ agent::agent(
 	// Collect information regarding the agent specific information
 	begin_refresh_agent_specific_information(a_refresh_agent_information_interval, a_iterations_for_compute_speed_test);
 
-	// Begin pulling training sets from disk asynchronously.
-	begin_pull_training_sets_from_disk();
-
 }
 
-std::vector<training_set> agent::get_training_set_ration(
+size_t agent::training_sets_to_digest_count(
 
 )
 {
-	// Get the vector of all training sets that are loaded into memory.
-	const_locked_resource l_loaded_training_sets = m_loaded_training_sets.const_lock();
+	return (size_t)((double)training_sets_on_disk_count() * normalized_compute_speed());
+}
 
-	size_t l_allowed_loaded_training_sets_count = 0;
+bool agent::try_get_random_training_set_from_disk(
+	training_set& a_output
+)
+{
+	size_t l_total_training_sets = training_sets_on_disk_count();
 
-	{
-		// Get the singular number of training sets allowed to occupy the loaded training sets buffer.
-		const_locked_resource l_allowed_loaded_training_sets_count_resource = m_allowed_loaded_training_sets_count.const_lock();
-		l_allowed_loaded_training_sets_count = *l_allowed_loaded_training_sets_count_resource;
-	}
-
-	std::vector<training_set> l_result;
-
-	if (l_loaded_training_sets->size() != l_allowed_loaded_training_sets_count)
-		// Return an empty vector of training sets, since the training sets have not yet been fully loaded from disk.
-		return l_result;
-
-	// Get the total number of training sets to digest.
-	size_t l_training_sets_to_digest = (size_t)((double)l_loaded_training_sets->size() * normalized_compute_speed());
-
-
-	double l_normalized_compute_speed = normalized_compute_speed();
-
-	if (isnan(l_normalized_compute_speed))
-		return l_result;
-
-	// Construct a random number generator
 	CryptoPP::AutoSeededRandomPool l_random;
 
-	for (int i = 0; i < l_training_sets_to_digest; i++)
+	size_t l_training_set_index = l_random.GenerateWord32(0, l_total_training_sets - 1);
+
+	int i = 0;
+
+	for (auto l_entry : std::filesystem::directory_iterator(m_training_data_folder_path))
 	{
-		size_t l_training_set_index = l_random.GenerateWord32(0, l_loaded_training_sets->size() - 1);
-		l_result.push_back(l_loaded_training_sets->at(l_training_set_index));
+		if (i != l_training_set_index)
+		{
+			i++;
+			continue;
+		}
+
+		// Import this training set.
+		return try_get_training_set(l_entry.path().u8string(), a_output);
+
 	}
 
-	return l_result;
+}
+
+bool agent::try_get_param_vector_information_from_disk(
+	param_vector_information& a_param_vector_information
+)
+{
+	std::vector<uint8_t> l_bytes;
+
+	try
+	{
+		affix_base::files::file_read(m_param_vector_information_path, l_bytes);
+	}
+	catch (std::exception)
+	{
+		return false;
+	}
+
+	affix_base::data::byte_buffer l_byte_buffer(l_bytes);
+
+	return l_byte_buffer.pop_front(a_param_vector_information);
+
+}
+
+bool agent::try_set_param_vector_information_in_disk(
+	const param_vector_information& a_param_vector_information
+)
+{
+	affix_base::data::byte_buffer l_byte_buffer;
+
+	if (!l_byte_buffer.push_back(a_param_vector_information))
+		return false;
+
+	try
+	{
+		affix_base::files::file_write(m_param_vector_information_path, l_byte_buffer.data());
+	}
+	catch (std::exception)
+	{
+		return false;
+	}
+
+	return true;
 
 }
 
 param_vector_information agent::synchronize(
-	const param_vector_information& a_param_vector_informaiton,
-	const param_vector_information& a_update_vector_information
+	const param_vector_update_information& a_param_vector_update_informaiton
 )
 {
 	param_vector_information l_updated_param_vector_information;
@@ -213,11 +244,10 @@ param_vector_information agent::synchronize(
 	}
 
 	// Invoke the update request.
-	invoke<param_vector_information, param_vector_information>(
+	invoke<param_vector_update_information>(
 		await_distribution_lead(),
 		function_types::request_synchronize,
-		a_param_vector_informaiton,
-		a_update_vector_information
+		a_param_vector_update_informaiton
 		);
 
 	// Wait for the callback to complete
@@ -239,7 +269,7 @@ std::string agent::await_distribution_lead(
 	}
 }
 
-void agent::apply_training_set_updates(
+void agent::apply_param_vector_updates(
 	std::map<std::string, param_vector_update_information>& a_param_vector_updates,
 	param_vector_information& a_updated_param_vector_information
 )
@@ -248,7 +278,7 @@ void agent::apply_training_set_updates(
 
 	for (auto i = a_param_vector_updates.begin(); i != a_param_vector_updates.end(); i++)
 	{
-		if (i->second.m_param_vector_information.m_training_sets_digested > l_param_vector_information.m_training_sets_digested)
+		if (i->second.m_param_vector_information.m_training_sets_digested >= l_param_vector_information.m_training_sets_digested)
 		{
 			l_param_vector_information = i->second.m_param_vector_information;
 		}
@@ -278,70 +308,25 @@ void agent::apply_training_set_updates(
 
 }
 
-void agent::begin_pull_training_sets_from_disk(
-
-)
-{
-	locked_resource l_continue = m_continue_loading_training_sets.lock();
-
-	// Set the continuing state to true
-	*l_continue = true;
-
-	locked_resource l_training_set_loading_thread = m_training_set_loading_thread.lock();
-
-	 *l_training_set_loading_thread = std::thread(
-		[&]
-		{
-			while (true)
-			{
-				// Lock the resource describing whether or not we should continue
-				const_locked_resource l_should_continue = m_continue_loading_training_sets.const_lock();
-
-				if (!*l_should_continue)
-					// Quit the thread if it should happen.
-					return;
-
-
-				locked_resource l_loaded_training_sets = m_loaded_training_sets.lock();
-
-				size_t l_allowable_loaded_training_sets_count = 0;
-
-				{
-					// Lock the resource describing whether or not we should continue
-					const_locked_resource l_allowable_loaded_training_sets_count_resource = m_allowed_loaded_training_sets_count.const_lock();
-					l_allowable_loaded_training_sets_count = *l_allowable_loaded_training_sets_count_resource;
-				}
-
-				training_set l_training_set;
-					
-				if (!try_get_random_training_set_from_disk(l_training_set))
-					// Do nothing, since we were unable to load the training set.
-					continue;
-
-				l_loaded_training_sets->push_back(l_training_set);
-
-				if (l_loaded_training_sets->size() > l_allowable_loaded_training_sets_count)
-					// If there are too many training sets loaded, erase one at the beginning to return to maximum capacity.
-					l_loaded_training_sets->erase(l_loaded_training_sets->begin());
-
-			}
-		});
-}
-
 void agent::begin_refresh_agent_specific_information(
 	const uint64_t& a_refresh_interval,
 	const size_t& a_compute_speed_test_iterations
 )
 {
-	locked_resource l_agent_specific_information = m_local_agent_information.m_parsed_agent_specific_information.lock();
-
 	std::clog << "[ ADSL ] Performing standardized compute speed test." << std::endl;
-	l_agent_specific_information->m_compute_speed = get_compute_speed(a_compute_speed_test_iterations);
-	std::clog << "[ ADSL ] Absolute compute speed: " << l_agent_specific_information->m_compute_speed << std::endl;
+	double l_compute_speed = get_compute_speed(a_compute_speed_test_iterations);
+	std::clog << "[ ADSL ] Absolute compute speed: " << l_compute_speed << std::endl;
 
 	std::clog << "[ ADSL ] Collecting training set hashes from disk." << std::endl;
-	l_agent_specific_information->m_training_set_hashes = get_training_data_hashes();
-	std::clog << "[ ADSL ] Collected: " << l_agent_specific_information->m_training_set_hashes.size() << " training set hashes from disk." << std::endl;
+	std::vector<std::vector<uint8_t>> l_training_set_hashes = get_training_data_hashes();
+	std::clog << "[ ADSL ] Collected: " << l_training_set_hashes.size() << " training set hashes from disk." << std::endl;
+
+	{
+		// Save new info
+		locked_resource l_agent_specific_information = m_local_agent_information.m_parsed_agent_specific_information.lock();
+		l_agent_specific_information->m_compute_speed = l_compute_speed;
+		l_agent_specific_information->m_training_set_hashes = l_training_set_hashes;
+	}
 
 	// Discloses the agent information now that it's updated.
 	disclose_agent_information();
@@ -355,33 +340,6 @@ void agent::begin_refresh_agent_specific_information(
 			begin_refresh_agent_specific_information(a_refresh_interval, a_compute_speed_test_iterations);
 
 		}});
-
-}
-
-bool agent::try_get_random_training_set_from_disk(
-	training_set& a_output
-)
-{
-	size_t l_total_training_sets = training_sets_on_disk_count();
-
-	CryptoPP::AutoSeededRandomPool l_random;
-
-	size_t l_training_set_index = l_random.GenerateWord32(0, l_total_training_sets - 1);
-
-	int i = 0;
-
-	for (auto l_entry : std::filesystem::directory_iterator(m_training_data_folder_path))
-	{
-		if (i != l_training_set_index)
-		{
-			i++;
-			continue;
-		}
-		
-		// Import this training set.
-		return try_get_training_set(l_entry.path().u8string(), a_output);
-
-	}
 
 }
 

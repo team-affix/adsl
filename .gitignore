@@ -4,7 +4,7 @@
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
 adsl/alg_test/config/*
-adsl/alg_test/training_data_*
+adsl/alg_test/example-session-*
 
 # User-specific files
 *.rsuser
