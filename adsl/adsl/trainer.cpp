@@ -51,6 +51,19 @@ std::string larger_identity(
 
 }
 
+trainer::~trainer(
+
+)
+{
+	m_continue_background_threads = false;
+
+	if (m_context_thread.joinable())
+		m_context_thread.join();
+
+	if (m_process_thread.joinable())
+		m_process_thread.join();
+
+}
 
 trainer::trainer(
 	const std::string& a_client_json_file_path,
@@ -158,10 +171,9 @@ trainer::trainer(
 	m_context_thread = std::thread(
 		[&]
 		{
-			while (true)
+			while (m_continue_background_threads)
 			{
 				// Repeatedly run the io context
-				asio::io_context::work l_idlework(m_io_context);
 				m_io_context.run();
 				m_io_context.reset();
 			}
@@ -170,7 +182,7 @@ trainer::trainer(
 	m_process_thread = std::thread(
 		[&]
 		{
-			while (true)
+			while (m_continue_background_threads)
 			{
 				m_client.process();
 				m_agent.process();
@@ -194,11 +206,64 @@ trainer::trainer(
 
 	m_agent.disclose_agent_information();
 
-	while (true)
+}
+
+void trainer::process_epoch(
+
+)
+{
+	param_vector_update_information l_param_vector_update_information;
+
+	if (!read_param_vector_information_from_disk(l_param_vector_update_information.m_param_vector_information))
 	{
-		// Actually train the model
-		process_epoch();
+		std::clog << "[ ADSL ] Error; unable to read param vector from disk." << std::endl;
+		// keep going, even though this failure happened.
 	}
+
+	l_param_vector_update_information.m_param_vector_information.m_param_vector = m_set_param_vector(l_param_vector_update_information.m_param_vector_information.m_param_vector);
+
+	const size_t l_training_sets_to_digest = training_sets_to_digest_count();
+
+	double l_cost = 0;
+
+	for (int i = 0; i < l_training_sets_to_digest; i++)
+	{
+		training_set l_training_set;
+
+		if (!read_random_training_set_from_disk(l_training_set))
+		{
+			std::clog << "[ ADSL ] Error; unable to read training set from disk." << std::endl;
+			continue;
+		}
+
+		l_cost += m_cycle(l_training_set);
+
+	}
+
+	std::cout << "[ ADSL ] local cost: " << l_cost << std::endl;
+
+	l_param_vector_update_information.m_update_vector_information.m_param_vector = m_get_update_vector();
+	l_param_vector_update_information.m_update_vector_information.m_training_sets_digested = l_training_sets_to_digest;
+
+	param_vector_information l_updated_param_vector_information =
+		synchronize_param_vector(l_param_vector_update_information);
+
+	if (!write_param_vector_information_to_disk(l_updated_param_vector_information))
+	{
+		std::clog << "[ ADSL ] Error; failed to write the param vector to disk." << std::endl;
+	}
+
+	// Refresh ASI and if it has changed, disclose the new ASI
+	if (refresh_agent_specific_information())
+		m_agent.disclose_agent_information();
+
+}
+
+bool trainer::add_training_set(
+	const training_set& a_training_set
+)
+{
+	return write_training_set_to_disk(a_training_set.hash(), a_training_set);
 }
 
 std::string trainer::session_root_path(
@@ -629,56 +694,5 @@ bool trainer::refresh_agent_specific_information(
 	}
 
 	return l_asi_changed;
-
-}
-
-void trainer::process_epoch(
-
-)
-{
-	param_vector_update_information l_param_vector_update_information;
-	
-	if (!read_param_vector_information_from_disk(l_param_vector_update_information.m_param_vector_information))
-	{
-		std::clog << "[ ADSL ] Error; unable to read param vector from disk." << std::endl;
-		// keep going, even though this failure happened.
-	}
-
-	l_param_vector_update_information.m_param_vector_information.m_param_vector = m_set_param_vector(l_param_vector_update_information.m_param_vector_information.m_param_vector);
-
-	const size_t l_training_sets_to_digest = training_sets_to_digest_count();
-
-	double l_cost = 0;
-
-	for (int i = 0; i < l_training_sets_to_digest; i++)
-	{
-		training_set l_training_set;
-
-		if (!read_random_training_set_from_disk(l_training_set))
-		{
-			std::clog << "[ ADSL ] Error; unable to read training set from disk." << std::endl;
-			continue;
-		}
-
-		l_cost += m_cycle(l_training_set);
-
-	}
-
-	std::cout << "[ ADSL ] local cost: " << l_cost << std::endl;
-
-	l_param_vector_update_information.m_update_vector_information.m_param_vector = m_get_update_vector();
-	l_param_vector_update_information.m_update_vector_information.m_training_sets_digested = l_training_sets_to_digest;
-
-	param_vector_information l_updated_param_vector_information =
-		synchronize_param_vector(l_param_vector_update_information);
-
-	if (!write_param_vector_information_to_disk(l_updated_param_vector_information))
-	{
-		std::clog << "[ ADSL ] Error; failed to write the param vector to disk." << std::endl;
-	}
-
-	// Refresh ASI and if it has changed, disclose the new ASI
-	if (refresh_agent_specific_information())
-		m_agent.disclose_agent_information();
 
 }

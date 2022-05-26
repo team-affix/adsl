@@ -33,7 +33,13 @@ namespace adsl
 		uint64_t m_compute_speed_test_interval_in_seconds = 0;
 		uint64_t m_compute_speed_test_last_time_taken = 0;
 
+		volatile bool m_continue_background_threads = true;
+
 	public:
+		virtual ~trainer(
+
+		);
+
 		trainer(
 			const std::string& a_client_json_file_path,
 			const std::string& a_session_name,
@@ -41,6 +47,14 @@ namespace adsl
 			const std::function<double(training_set)>& a_cycle,
 			const std::function<std::vector<double>()>& a_get_update_vector,
 			const uint64_t& a_compute_speed_test_interval_in_seconds
+		);
+
+		void process_epoch(
+
+		);
+
+		bool add_training_set(
+			const training_set& a_training_set
 		);
 
 	protected:
@@ -127,11 +141,6 @@ namespace adsl
 		bool refresh_agent_specific_information(
 
 		);
-
-		void process_epoch(
-
-		);
-
 
 	};
 }

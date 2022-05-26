@@ -37,3 +37,13 @@ param_vector_information::param_vector_information(
 {
 
 }
+
+param_vector_information& param_vector_information::operator=(
+	const param_vector_information& a_param_vector_information
+)
+{
+	m_param_vector = a_param_vector_information.m_param_vector;
+	m_training_sets_digested = a_param_vector_information.m_training_sets_digested;
+
+	return *this;
+}

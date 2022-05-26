@@ -30,10 +30,10 @@
     <ClInclude Include="param_vector_update_information.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="param_vector_information.h">
+    <ClInclude Include="trainer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="trainer.h">
+    <ClInclude Include="param_vector_information.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

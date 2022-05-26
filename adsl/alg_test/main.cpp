@@ -82,7 +82,17 @@ int main(
 		l_cycle,
 		l_get_update_vector,
 		60
-		);
+	);
+
+	l_trainer.add_training_set(training_set({ 0, 0 }, { 0 }));
+	l_trainer.add_training_set(training_set({ 0, 1 }, { 1 }));
+	l_trainer.add_training_set(training_set({ 1, 0 }, { 1 }));
+	l_trainer.add_training_set(training_set({ 1, 1 }, { 0 }));
+
+	while (true)
+	{
+		l_trainer.process_epoch();
+	}
 
 	return 0;
 
