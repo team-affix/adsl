@@ -33,6 +33,9 @@
     <ClInclude Include="param_vector_information.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="trainer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="agent.cpp">
@@ -48,6 +51,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="param_vector_information.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="trainer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
