@@ -75,7 +75,7 @@ trainer::trainer(
 ) :
 	m_session_name(a_session_name),
 	m_client(m_io_context, new affix_services::client_configuration(a_client_json_file_path)),
-	m_agent(m_client, "adsl-" + a_session_name, adsl::agent_specific_information(training_set_hashes(), absolute_compute_speed())),
+	m_agent(m_client, "adsl-" + a_session_name, adsl::agent_specific_information(training_set_file_names(), absolute_compute_speed())),
 	m_set_param_vector(a_set_param_vector),
 	m_cycle(a_cycle),
 	m_get_update_vector(a_get_update_vector),
@@ -95,19 +95,21 @@ trainer::trainer(
 
 				std::vector<uint8_t> l_hash = a_training_set.hash();
 
-				auto l_entry = std::find_if(l_parsed_agent_information->m_training_set_hashes.begin(),
-					l_parsed_agent_information->m_training_set_hashes.end(),
-					[&](const std::vector<uint8_t>& a_entry)
+				std::string l_training_set_file_name = file_name_from_hash(l_hash);
+
+				auto l_entry = std::find_if(l_parsed_agent_information->m_training_set_file_names.begin(),
+					l_parsed_agent_information->m_training_set_file_names.end(),
+					[&](const std::string& a_entry)
 					{
-						return std::equal(a_entry.begin(), a_entry.end(), l_hash.begin(), l_hash.end());
+						return a_entry == l_training_set_file_name;
 					});
 
-				if (l_entry != l_parsed_agent_information->m_training_set_hashes.end())
+				if (l_entry != l_parsed_agent_information->m_training_set_file_names.end())
 					// Do nothing, (ignore this request), a local copy of the training set already exists. just return.
 					return;
 
 				// Log the fact that we received a new training set.
-				std::clog << "[ ADSL ] Received training set." << std::endl;
+				std::clog << "[ ADSL ] Received training set; file name: " << l_training_set_file_name << std::endl;
 
 				if (!write_training_set_to_disk(l_hash, a_training_set))
 				{
@@ -372,11 +374,11 @@ double trainer::normalized_compute_speed(
 
 }
 
-std::vector<std::vector<uint8_t>> trainer::training_set_hashes(
+std::vector<std::string> trainer::training_set_file_names(
 
 )
 {
-	std::vector<std::vector<uint8_t>> l_result;
+	std::vector<std::string> l_result;
 
 	namespace fs = std::filesystem;
 
@@ -390,16 +392,8 @@ std::vector<std::vector<uint8_t>> trainer::training_set_hashes(
 
 	for (const auto& a_entry : fs::directory_iterator(training_sets_path()))
 	{
-		training_set l_training_set;
-
-		if (!file_read(a_entry.path().u8string(), l_training_set))
-		{
-			std::clog << "[ ADSL ] Error; failed to read training set from file: " << fs::absolute(a_entry.path()).u8string() << std::endl;
-			continue;
-		}
-
 		// Push hash of training set to vector
-		l_result.push_back(l_training_set.hash());
+		l_result.push_back(a_entry.path().filename().u8string());
 
 	}
 
@@ -518,25 +512,22 @@ void trainer::synchronize_local_training_sets(
 	// Get the remote agent's parsed information.
 	const_locked_resource l_remote_agent_parsed_information = l_agent_iterator->second->m_parsed_agent_specific_information.const_lock();
 
-	for (int i = 0; i < l_local_agent_information->m_training_set_hashes.size(); i++)
+	for (int i = 0; i < l_local_agent_information->m_training_set_file_names.size(); i++)
 	{
-		const std::vector<uint8_t>& l_local_hash = l_local_agent_information->m_training_set_hashes.at(i);
+		const std::string& l_local_training_set_file_name = l_local_agent_information->m_training_set_file_names.at(i);
 
 		// Try to get an entry for the local training set having been registered with the remote agent.
-		auto l_entry = std::find_if(l_remote_agent_parsed_information->m_training_set_hashes.begin(),
-			l_remote_agent_parsed_information->m_training_set_hashes.end(),
-			[&](const std::vector<uint8_t>& a_hash)
-			{
-				return std::equal(a_hash.begin(), a_hash.end(), l_local_hash.begin(), l_local_hash.end());
-			});
+		auto l_entry = std::find(l_remote_agent_parsed_information->m_training_set_file_names.begin(),
+			l_remote_agent_parsed_information->m_training_set_file_names.end(),
+			l_local_training_set_file_name);
 
-		if (l_entry == l_remote_agent_parsed_information->m_training_set_hashes.end())
+		if (l_entry == l_remote_agent_parsed_information->m_training_set_file_names.end())
 		{
 			// Remote agent DOES NOT have the training set in question.
 
 			training_set l_local_training_set;
 
-			std::string l_training_set_path = training_sets_path() + file_name_from_hash(l_local_hash);
+			std::string l_training_set_path = training_sets_path() + l_local_training_set_file_name;
 
 			if (!file_read(l_training_set_path, l_local_training_set))
 			{
@@ -545,7 +536,7 @@ void trainer::synchronize_local_training_sets(
 			}
 
 			// Write message to log
-			std::clog << "[ ADSL ] Sending training set to remote agent: " << a_remote_client_identity.substr(50, 10) << "; hash: " << base64_from_bytes(l_local_hash) << std::endl;
+			std::clog << "[ ADSL ] Sending training set to remote agent: " << a_remote_client_identity.substr(50, 10) << "; file name: " << l_local_training_set_file_name << std::endl;
 
 			// Send the training set to the remote agent.
 			m_agent.invoke(a_remote_client_identity, function_types::training_set, l_local_training_set);
@@ -560,7 +551,7 @@ size_t trainer::training_sets_to_digest_count(
 
 )
 {
-	size_t l_training_set_hash_count = m_agent.m_local_agent_information.m_parsed_agent_specific_information.const_lock()->m_training_set_hashes.size();
+	size_t l_training_set_hash_count = m_agent.m_local_agent_information.m_parsed_agent_specific_information.const_lock()->m_training_set_file_names.size();
 
 	return (size_t)((double)l_training_set_hash_count * normalized_compute_speed());
 
@@ -668,8 +659,8 @@ bool trainer::refresh_agent_specific_information(
 	std::clog << "[ ADSL ] Absolute compute speed: " << l_compute_speed << std::endl;
 
 	std::clog << "[ ADSL ] Collecting training set hashes from disk." << std::endl;
-	std::vector<std::vector<uint8_t>> l_training_set_hashes = training_set_hashes();
-	std::clog << "[ ADSL ] Collected: " << l_training_set_hashes.size() << " training set hashes from disk." << std::endl;
+	std::vector<std::string> l_training_set_file_names = training_set_file_names();
+	std::clog << "[ ADSL ] Collected: " << l_training_set_file_names.size() << " training set hashes from disk." << std::endl;
 
 	bool l_asi_changed = false;
 
@@ -682,14 +673,14 @@ bool trainer::refresh_agent_specific_information(
 		l_asi_changed =
 			l_agent_specific_information->m_compute_speed != l_compute_speed
 			|| !std::equal(
-				l_agent_specific_information->m_training_set_hashes.begin(),
-				l_agent_specific_information->m_training_set_hashes.end(),
-				l_training_set_hashes.begin(),
-				l_training_set_hashes.end()
+				l_agent_specific_information->m_training_set_file_names.begin(),
+				l_agent_specific_information->m_training_set_file_names.end(),
+				l_training_set_file_names.begin(),
+				l_training_set_file_names.end()
 			);
 
 		l_agent_specific_information->m_compute_speed = l_compute_speed;
-		l_agent_specific_information->m_training_set_hashes = l_training_set_hashes;
+		l_agent_specific_information->m_training_set_file_names = l_training_set_file_names;
 
 	}
 

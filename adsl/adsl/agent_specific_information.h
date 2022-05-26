@@ -11,7 +11,7 @@ namespace adsl
 		/// <summary>
 		/// Vector of training set hashes.
 		/// </summary>
-		std::vector<std::vector<uint8_t>> m_training_set_hashes;
+		std::vector<std::string> m_training_set_file_names;
 
 		/// <summary>
 		/// Some measure of the compute speed of this machine.
@@ -33,7 +33,7 @@ namespace adsl
 		/// <param name="a_executable_hash"></param>
 		/// <param name="a_training_set_hashes"></param>
 		agent_specific_information(
-			const std::vector<std::vector<uint8_t>>& a_training_set_hashes,
+			const std::vector<std::string>& a_training_set_file_names,
 			const double& a_compute_speed
 		);
 

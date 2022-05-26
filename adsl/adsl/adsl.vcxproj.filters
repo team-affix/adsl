@@ -15,9 +15,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="agent.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="agent_specific_information.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -38,9 +35,6 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="agent.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="agent_specific_information.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

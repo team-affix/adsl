@@ -86,7 +86,7 @@ namespace adsl
 
 		);
 
-		std::vector<std::vector<uint8_t>> training_set_hashes(
+		std::vector<std::string> training_set_file_names(
 
 		);
 

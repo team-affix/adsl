@@ -187,7 +187,6 @@ msbuild ../../affix-base/affix-base.sln /p:Configuration=$(Configuration);Platfo
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="agent.h" />
     <ClInclude Include="agent_specific_information.h" />
     <ClInclude Include="function_types.h" />
     <ClInclude Include="param_vector_information.h" />
@@ -196,7 +195,6 @@ msbuild ../../affix-base/affix-base.sln /p:Configuration=$(Configuration);Platfo
     <ClInclude Include="training_set.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="agent.cpp" />
     <ClCompile Include="agent_specific_information.cpp" />
     <ClCompile Include="param_vector_information.cpp" />
     <ClCompile Include="param_vector_update_information.cpp" />
