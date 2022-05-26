@@ -3,6 +3,7 @@
 #include "aurora/models.h"
 #include "aurora/pseudo.h"
 #include "adsl/trainer.h"
+#include "affix-base/stopwatch.h"
 
 int main(
 
@@ -89,9 +90,22 @@ int main(
 	l_trainer.add_training_set(training_set({ 1, 0 }, { 1 }));
 	l_trainer.add_training_set(training_set({ 1, 1 }, { 0 }));
 
-	while (true)
+	affix_base::timing::stopwatch l_stopwatch;
+
+	for (int i = 0; true; i++)
 	{
-		l_trainer.process_epoch();
+		l_stopwatch.start();
+		epoch_information l_epoch_information = l_trainer.process_epoch();
+		if (i % 100 == 0)
+			std::cout 
+			<< "[ SESSION ] Iteration: " << i << std::endl
+			<< "  Cost: " << l_epoch_information.m_cost << std::endl
+			<< "  Period for single epoch: " << l_stopwatch.duration_milliseconds() << " ms" << std::endl
+			<< "  All-time digested: " << l_epoch_information.m_end_of_epoch_all_time_global_training_sets_digested << std::endl
+			<< "  Last-epoch digested globally: " << l_epoch_information.last_epoch_global_training_sets_digested() << std::endl
+			<< "  Last-epoch digested locally: " << l_epoch_information.m_last_epoch_local_training_sets_digested << std::endl
+			<< "  Last-epoch local proportion of contribution: " << l_epoch_information.last_epoch_local_proportion_contribution() << std::endl
+			<< std::endl;
 	}
 
 	return 0;

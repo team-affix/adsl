@@ -210,7 +210,7 @@ trainer::trainer(
 
 }
 
-void trainer::process_epoch(
+epoch_information trainer::process_epoch(
 
 )
 {
@@ -242,8 +242,6 @@ void trainer::process_epoch(
 
 	}
 
-	std::cout << "[ ADSL ] local cost: " << l_cost << std::endl;
-
 	l_param_vector_update_information.m_update_vector_information.m_param_vector = m_get_update_vector();
 	l_param_vector_update_information.m_update_vector_information.m_training_sets_digested = l_training_sets_to_digest;
 
@@ -258,6 +256,13 @@ void trainer::process_epoch(
 	// Refresh ASI and if it has changed, disclose the new ASI
 	if (refresh_agent_specific_information())
 		m_agent.disclose_agent_information();
+
+	return epoch_information(
+		l_cost,
+		l_param_vector_update_information.m_param_vector_information.m_training_sets_digested,
+		l_updated_param_vector_information.m_training_sets_digested,
+		l_training_sets_to_digest
+		);
 
 }
 

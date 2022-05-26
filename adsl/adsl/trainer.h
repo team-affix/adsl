@@ -7,6 +7,7 @@
 #include "training_set.h"
 #include "param_vector_information.h"
 #include "param_vector_update_information.h"
+#include "epoch_information.h"
 
 namespace adsl
 {
@@ -49,7 +50,7 @@ namespace adsl
 			const uint64_t& a_compute_speed_test_interval_in_seconds
 		);
 
-		void process_epoch(
+		epoch_information process_epoch(
 
 		);
 
