@@ -126,6 +126,10 @@ namespace adsl
 		size_t training_sets_to_digest_count(
 
 		);
+		
+		size_t agents_training_count(
+
+		);
 
 		param_vector_information synchronize_param_vector(
 			const param_vector_update_information& a_param_vector_update_information

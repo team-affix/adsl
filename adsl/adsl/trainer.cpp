@@ -258,6 +258,7 @@ epoch_information trainer::process_epoch(
 		m_agent.disclose_agent_information();
 
 	return epoch_information(
+		agents_training_count(),
 		l_cost,
 		l_param_vector_update_information.m_param_vector_information.m_training_sets_digested,
 		l_updated_param_vector_information.m_training_sets_digested,
@@ -560,6 +561,14 @@ size_t trainer::training_sets_to_digest_count(
 
 	return (size_t)((double)l_training_set_hash_count * normalized_compute_speed());
 
+}
+
+size_t trainer::agents_training_count(
+
+)
+{
+	affix_base::threading::const_locked_resource l_remote_agents = m_agent.m_remote_agents.const_lock();
+	return l_remote_agents->size();
 }
 
 param_vector_information trainer::synchronize_param_vector(

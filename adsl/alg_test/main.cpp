@@ -99,6 +99,7 @@ int main(
 		if (i % 100 == 0)
 			std::cout 
 			<< "[ SESSION ] Iteration: " << i << std::endl
+			<< "  Number of machines training: " << l_epoch_information.m_number_of_machines_training << std::endl
 			<< "  Cost: " << l_epoch_information.m_cost << std::endl
 			<< "  Period for single epoch: " << l_stopwatch.duration_milliseconds() << " ms" << std::endl
 			<< "  All-time digested: " << l_epoch_information.m_end_of_epoch_all_time_global_training_sets_digested << std::endl

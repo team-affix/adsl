@@ -3,11 +3,13 @@
 using namespace adsl;
 
 epoch_information::epoch_information(
+	const size_t& a_number_of_machines_training,
 	const double& a_cost,
 	const uint64_t& a_start_of_epoch_all_time_global_training_sets_digested,
 	const uint64_t& a_end_of_epoch_all_time_global_training_sets_digested,
 	const uint64_t& a_last_epoch_local_training_sets_digested
 ) :
+	m_number_of_machines_training(a_number_of_machines_training),
 	m_cost(a_cost),
 	m_start_of_epoch_all_time_global_training_sets_digested(a_start_of_epoch_all_time_global_training_sets_digested),
 	m_end_of_epoch_all_time_global_training_sets_digested(a_end_of_epoch_all_time_global_training_sets_digested),
