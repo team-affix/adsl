@@ -31,8 +31,8 @@ namespace adsl
 
 		CryptoPP::AutoSeededRandomPool m_random;
 
-		uint64_t m_compute_speed_test_interval_in_seconds = 0;
-		uint64_t m_compute_speed_test_last_time_taken = 0;
+		uint64_t m_agent_specific_information_refresh_interval_in_seconds = 0;
+		uint64_t m_agent_specific_information_last_refresh_time = 0;
 
 		volatile bool m_continue_background_threads = true;
 
@@ -47,7 +47,7 @@ namespace adsl
 			const std::function<std::vector<double>(std::vector<double>)>& a_set_param_vector,
 			const std::function<double(training_set)>& a_cycle,
 			const std::function<std::vector<double>()>& a_get_update_vector,
-			const uint64_t& a_compute_speed_test_interval_in_seconds
+			const uint64_t& a_agent_specific_information_refresh_interval_in_seconds
 		);
 
 		epoch_information process_epoch(

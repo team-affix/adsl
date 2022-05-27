@@ -71,15 +71,15 @@ trainer::trainer(
 	const std::function<std::vector<double>(std::vector<double>)>& a_set_param_vector,
 	const std::function<double(training_set)>& a_cycle,
 	const std::function<std::vector<double>()>& a_get_update_vector,
-	const uint64_t& a_compute_speed_test_interval_in_seconds
+	const uint64_t& a_agent_specific_information_refresh_interval_in_seconds
 ) :
 	m_session_name(a_session_name),
 	m_client(m_io_context, new affix_services::client_configuration(a_client_json_file_path)),
-	m_agent(m_client, "adsl-" + a_session_name, adsl::agent_specific_information(training_set_file_names(), absolute_compute_speed())),
+	m_agent(m_client, "adsl-" + a_session_name, adsl::agent_specific_information()),
 	m_set_param_vector(a_set_param_vector),
 	m_cycle(a_cycle),
 	m_get_update_vector(a_get_update_vector),
-	m_compute_speed_test_interval_in_seconds(a_compute_speed_test_interval_in_seconds)
+	m_agent_specific_information_refresh_interval_in_seconds(a_agent_specific_information_refresh_interval_in_seconds)
 {
 	using namespace affix_base::threading;
 	using namespace affix_base::files;
@@ -206,6 +206,7 @@ trainer::trainer(
 		write_training_set_to_disk(l_training_set.hash(), l_training_set);
 	}*/
 
+	refresh_agent_specific_information();
 	m_agent.disclose_agent_information();
 
 }
@@ -313,16 +314,6 @@ double trainer::absolute_compute_speed(
 
 )
 {
-	if (affix_base::timing::utc_time() - m_compute_speed_test_last_time_taken 
-		< m_compute_speed_test_interval_in_seconds)
-	{
-		// Don't perform the test, just return the cached value
-		return
-			m_agent.m_local_agent_information.m_parsed_agent_specific_information.const_lock()->m_compute_speed;
-	}
-
-	m_compute_speed_test_last_time_taken = affix_base::timing::utc_time();
-
 	const size_t l_iterations = 10000;
 
 	using namespace aurora;
@@ -668,6 +659,10 @@ bool trainer::refresh_agent_specific_information(
 
 )
 {
+	if (affix_base::timing::utc_time() - m_agent_specific_information_last_refresh_time
+		< m_agent_specific_information_refresh_interval_in_seconds)
+		return false;
+
 	std::clog << "[ ADSL ] Performing standardized compute speed test." << std::endl;
 	double l_compute_speed = absolute_compute_speed();
 	std::clog << "[ ADSL ] Absolute compute speed: " << l_compute_speed << std::endl;
@@ -676,28 +671,18 @@ bool trainer::refresh_agent_specific_information(
 	std::vector<std::string> l_training_set_file_names = training_set_file_names();
 	std::clog << "[ ADSL ] Collected: " << l_training_set_file_names.size() << " training set hashes from disk." << std::endl;
 
-	bool l_asi_changed = false;
-
 	{
 		using namespace affix_base::threading;
 
 		// Save new info
 		locked_resource l_agent_specific_information = m_agent.m_local_agent_information.m_parsed_agent_specific_information.lock();
-
-		l_asi_changed =
-			l_agent_specific_information->m_compute_speed != l_compute_speed
-			|| !std::equal(
-				l_agent_specific_information->m_training_set_file_names.begin(),
-				l_agent_specific_information->m_training_set_file_names.end(),
-				l_training_set_file_names.begin(),
-				l_training_set_file_names.end()
-			);
-
 		l_agent_specific_information->m_compute_speed = l_compute_speed;
 		l_agent_specific_information->m_training_set_file_names = l_training_set_file_names;
 
 	}
 
-	return l_asi_changed;
+	m_agent_specific_information_last_refresh_time = affix_base::timing::utc_time();
+
+	return true;
 
 }
