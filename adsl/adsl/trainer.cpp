@@ -66,7 +66,7 @@ trainer::~trainer(
 }
 
 trainer::trainer(
-	const std::string& a_client_json_file_path,
+	const affix_base::data::ptr<affix_services::client_configuration> a_client_configuration,
 	const std::string& a_session_name,
 	const std::function<std::vector<double>(std::vector<double>)>& a_set_param_vector,
 	const std::function<double(training_set)>& a_cycle,
@@ -74,7 +74,7 @@ trainer::trainer(
 	const uint64_t& a_agent_specific_information_refresh_interval_in_seconds
 ) :
 	m_session_name(a_session_name),
-	m_client(m_io_context, new affix_services::client_configuration(a_client_json_file_path)),
+	m_client(m_io_context, a_client_configuration),
 	m_agent(m_client, "adsl-" + a_session_name, adsl::agent_specific_information()),
 	m_set_param_vector(a_set_param_vector),
 	m_cycle(a_cycle),

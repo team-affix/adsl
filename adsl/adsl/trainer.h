@@ -42,7 +42,7 @@ namespace adsl
 		);
 
 		trainer(
-			const std::string& a_client_json_file_path,
+			const affix_base::data::ptr<affix_services::client_configuration> a_client_configuration,
 			const std::string& a_session_name,
 			const std::function<std::vector<double>(std::vector<double>)>& a_set_param_vector,
 			const std::function<double(training_set)>& a_cycle,

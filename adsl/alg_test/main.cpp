@@ -74,10 +74,15 @@ int main(
 
 	std::ofstream l_nullstream;
 
-	std::clog.rdbuf(l_nullstream.rdbuf());
+	//std::clog.rdbuf(l_nullstream.rdbuf());
+
+	affix_base::data::ptr<affix_services::client_configuration> l_client_configuration(new affix_services::client_configuration("config/client_configuration.json"));
+
+	l_client_configuration->import_resource();
+	l_client_configuration->export_resource();
 
 	trainer l_trainer(
-		"config/client_configuration.json",
+		l_client_configuration,
 		"example-session-0",
 		l_set_param_vector,
 		l_cycle,
