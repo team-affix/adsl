@@ -23,7 +23,7 @@ int main(
 		fs::create_directory("config/");
 	};
 
-	Mse_loss l_model = new mse_loss(pseudo::tnn({ 2, 8, 1 }, pseudo::nlr(0.3)));
+	Mse_loss l_model = new mse_loss(pseudo::tnn({ 2, 200, 200, 1 }, pseudo::nlr(0.3)));
 
 	param_vector l_param_vector;
 
