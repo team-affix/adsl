@@ -3,8 +3,8 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
-adsl/alg_test/config/*
-*example-session-*
+adsl/adsl_example/config
+adsl/adsl_example/training_data
 
 # User-specific files
 *.rsuser
