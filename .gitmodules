@@ -7,4 +7,3 @@
 [submodule "aurora"]
 	path = aurora
 	url = git@github.com:team-affix/aurora.git
-
