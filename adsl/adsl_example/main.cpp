@@ -5,6 +5,8 @@
 #include "aurora/params.h"
 #include "aurora/param_init.h"
 #include "param_vector_information.h"
+#include "affix-base/files.h"
+#include "aurora/models.h"
 
 int main(
 
@@ -175,20 +177,67 @@ int main(
 
 	};
 
+
+
+
+	// Create param vector
+	aurora::params::param_vector l_pv;
+
+	auto l_import_params = [&]
+	{
+		for (int i = 0; i < l_pv.size(); i++)
+			l_pv[i]->state() = l_param_vector_information.m_param_vector[i];
+	};
+
+	auto l_export_gradient = [&]
+	{
+		l_update_vector_information.m_param_vector.resize(l_pv.size());
+		for (int i = 0; i < l_pv.size(); i++)
+		{
+			l_update_vector_information.m_param_vector[i] = ((aurora::params::param_sgd*)l_pv[i])->gradient();
+			((aurora::params::param_sgd*)l_pv[i])->gradient() = 0;
+		}
+	};
+
+
+
+	// Create model
+	aurora::models::Mse_loss l_mse_loss(aurora::pseudo::tnn({ 2, 5, 1 }, aurora::pseudo::nlr(0.3)));
+
+	l_mse_loss->param_recur(aurora::pseudo::param_init(new aurora::params::param_sgd(0.02), l_pv));
+
+	l_mse_loss->compile();
+
+
+	// Import params from file
+	if (affix_base::files::file_read("config/param_vector.bin", l_param_vector_information))
+	{
+		l_import_params();
+	}
+	else
+	{
+		l_pv.rand_norm();
+	}
+
 	for (int i = 0; true; i++)
 	{
 		l_synchronize_with_dl();
+		affix_base::files::file_write("config/param_vector.bin", l_param_vector_information);
+		l_import_params();
+
+		double l_cost = 0;
+
+		l_cost += l_mse_loss->cycle({ 0, 0 }, { 0 });
+		l_cost += l_mse_loss->cycle({ 0, 1 }, { 1 });
+		l_cost += l_mse_loss->cycle({ 1, 0 }, { 1 });
+		l_cost += l_mse_loss->cycle({ 1, 1 }, { 0 });
+
+		if (i % 10 == 0)
+			std::cout << l_cost << std::endl;
+
 		l_param_vector_information = *l_synchronized;
-		l_update_vector_information.m_training_sets_digested = 1;
-		std::cout << l_synchronized->m_training_sets_digested << std::endl;
-		if (i % 100 == 0)
-		{
-			std::scoped_lock l_lock(l_agent.m_guarded_data);
-			std::cout << "REGISTERED AGENTS: " << l_agent.m_guarded_data->m_registered_agents.size() << std::endl;
-			std::cout << "  LOCAL NORMALIZED COMPUTE SPEED: " << normalized_compute_speed() << std::endl;
-			l_agent.m_guarded_data->m_local_agent_information.set_parsed_agent_specific_information(l_compute_speed());
-			l_agent.disclose_agent_information();
-		}
+		l_export_gradient();
+		l_update_vector_information.m_training_sets_digested += 4;
 	}
 
 	return 0;
