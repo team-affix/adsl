@@ -7,6 +7,4 @@
 [submodule "aurora"]
 	path = aurora
 	url = git@github.com:team-affix/aurora.git
-[submodule "distributed-compute"]
-	path = distributed-compute
-	url = git@github.com:team-affix/distributed-compute.git
+
