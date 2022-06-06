@@ -105,10 +105,18 @@ int main(
 		{
 			while (true)
 			{
-				l_client.process();
-				l_agent.process();
 				l_context.run();
 				l_context.reset();
+			}
+		});
+
+	std::thread l_thread_2(
+		[&]
+		{
+			while (true)
+			{
+				l_client.process();
+				l_agent.process();
 
 				std::scoped_lock l_lock(l_agent.m_guarded_data);
 
@@ -116,7 +124,6 @@ int main(
 				{
 					l_agent.invoke_on_all("response_synchronize", l_synchronize());
 				}
-
 			}
 		});
 
