@@ -189,6 +189,13 @@ int main(
 			l_pv[i]->state() = l_param_vector_information.m_param_vector[i];
 	};
 
+	auto l_export_params = [&]
+	{
+		l_param_vector_information.m_param_vector.resize(l_pv.size());
+		for (int i = 0; i < l_pv.size(); i++)
+			l_param_vector_information.m_param_vector[i] = l_pv[i]->state();
+	};
+
 	auto l_export_gradient = [&]
 	{
 		l_update_vector_information.m_param_vector.resize(l_pv.size());
@@ -210,13 +217,15 @@ int main(
 
 
 	// Import params from file
-	if (affix_base::files::file_read("config/param_vector.bin", l_param_vector_information))
+	if (affix_base::files::file_read("config/param_vector.bin", l_param_vector_information) &&
+		l_param_vector_information.m_param_vector.size() == l_pv.size())
 	{
 		l_import_params();
 	}
 	else
 	{
 		l_pv.rand_norm();
+		l_export_params();
 	}
 
 	for (int i = 0; true; i++)
@@ -226,8 +235,9 @@ int main(
 		l_import_params();
 
 		double l_cost = 0;
-
-		l_cost += l_mse_loss->cycle({ 0, 0 }, { 0 });
+		aurora::maths::tensor x = { 0,0 };
+		aurora::maths::tensor y = { 0 };
+		l_cost += l_mse_loss->cycle(x, y);
 		l_cost += l_mse_loss->cycle({ 0, 1 }, { 1 });
 		l_cost += l_mse_loss->cycle({ 1, 0 }, { 1 });
 		l_cost += l_mse_loss->cycle({ 1, 1 }, { 0 });
