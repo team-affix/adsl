@@ -51,6 +51,29 @@ int main(
 
 	affix_services::agent<double, std::string> l_agent(l_client, "adsl-example", l_compute_speed());
 
+	auto normalized_compute_speed = [&]() -> double
+	{
+		std::scoped_lock l_lock(l_agent.m_guarded_data);
+
+		double l_total_compute_speed = 0;
+
+		for (auto i : l_agent.m_guarded_data->m_registered_agents)
+		{
+			double l_registered_agent_compute_speed = 0;
+			if (!i.second.get_parsed_agent_specific_information(l_registered_agent_compute_speed))
+				continue;
+			l_total_compute_speed += l_registered_agent_compute_speed;
+		}
+
+		double l_local_agent_compute_speed = 0;
+
+		if (!l_agent.m_guarded_data->m_local_agent_information.get_parsed_agent_specific_information(l_local_agent_compute_speed))
+			return 0;
+
+		return l_local_agent_compute_speed / l_total_compute_speed;
+
+	};
+
 	l_agent.disclose_agent_information();
 
 	std::vector<std::pair<adsl::param_vector_information, adsl::param_vector_information>> l_synchronization_requests;
@@ -133,7 +156,7 @@ int main(
 	auto l_synchronize_with_dl = [&]
 	{
 		l_synchronized = nullptr;
-
+		
 		std::string l_previous_distribution_lead;
 
 		while (l_synchronized == nullptr)
@@ -158,10 +181,13 @@ int main(
 		l_param_vector_information = *l_synchronized;
 		l_update_vector_information.m_training_sets_digested = 1;
 		std::cout << l_synchronized->m_training_sets_digested << std::endl;
-		if (i % 1000 == 0)
+		if (i % 100 == 0)
 		{
 			std::scoped_lock l_lock(l_agent.m_guarded_data);
-			std::cout << "REGISTERED AGENTS:" << l_agent.m_guarded_data->m_registered_agents.size() << std::endl;
+			std::cout << "REGISTERED AGENTS: " << l_agent.m_guarded_data->m_registered_agents.size() << std::endl;
+			std::cout << "  LOCAL NORMALIZED COMPUTE SPEED: " << normalized_compute_speed() << std::endl;
+			l_agent.m_guarded_data->m_local_agent_information.set_parsed_agent_specific_information(l_compute_speed());
+			l_agent.disclose_agent_information();
 		}
 	}
 
