@@ -8,247 +8,417 @@
 #include "affix-base/files.h"
 #include "aurora/models.h"
 
-int main(
-
-)
+class trainer
 {
-	namespace fs = std::filesystem;
+protected:
+	asio::io_context m_io_context;
 
-	asio::io_context l_context;
+	affix_base::data::ptr<affix_services::client> m_client;
 
-	// Create folders if they do not already exist
-	if (!fs::exists("config/"))
-		fs::create_directory("config/");
-	if (!fs::exists("training_data/"))
-		fs::create_directory("training_data/");
+	affix_base::data::ptr<affix_services::agent<double, std::string>> m_agent;
 
-	affix_base::data::ptr<affix_services::client_configuration> l_client_configuration(new affix_services::client_configuration("config/client_configuration.json"));
-	l_client_configuration->import_resource();
-	l_client_configuration->export_resource();
+	std::vector<std::pair<adsl::param_vector_information, adsl::param_vector_information>> m_synchronization_requests;
 
-	affix_services::client l_client(l_context, l_client_configuration);
+	volatile bool m_background_thread_continue = false;
 
-	// Function which returns the compute speed of the local machine.
-	auto l_compute_speed = []() -> double
+	std::thread m_asio_thread;
+
+	std::thread m_affix_services_thread;
+
+	size_t m_ideal_mini_batch_size = 0;
+
+	double m_learn_rate = 0;
+
+public:
+	~trainer(
+
+	)
 	{
-		affix_base::timing::stopwatch l_stopwatch;
+		m_background_thread_continue = false;
+		if (m_asio_thread.joinable())
+			m_asio_thread.join();
+		if (m_affix_services_thread.joinable())
+			m_affix_services_thread.join();
+	}
 
-		const int ITERATIONS = 1000000000;
-
-		double l_0 = 1.2;
-		double l_1 = 13.6;
-		double l_2 = 0;
-
-		l_stopwatch.start();
-
-		for (int i = 0; i < ITERATIONS; i++)
-		{
-			l_2 = l_0 + l_1;
-			l_2 = l_0 * l_1;
-		}
-
-		return (double)ITERATIONS / (double)l_stopwatch.duration_milliseconds();
-
-	};
-
-	affix_services::agent<double, std::string> l_agent(l_client, "adsl-example", l_compute_speed());
-
-	auto normalized_compute_speed = [&]() -> double
+	trainer(
+		const size_t& a_ideal_mini_batch_size,
+		const double& a_learn_rate
+	) :
+		m_ideal_mini_batch_size(a_ideal_mini_batch_size),
+		m_learn_rate(a_learn_rate)
 	{
-		std::scoped_lock l_lock(l_agent.m_guarded_data);
-
-		double l_total_compute_speed = 0;
-
-		for (auto i : l_agent.m_guarded_data->m_registered_agents)
-		{
-			double l_registered_agent_compute_speed = 0;
-			if (!i.second.get_parsed_agent_specific_information(l_registered_agent_compute_speed))
-				continue;
-			l_total_compute_speed += l_registered_agent_compute_speed;
-		}
-
-		double l_local_agent_compute_speed = 0;
-
-		if (!l_agent.m_guarded_data->m_local_agent_information.get_parsed_agent_specific_information(l_local_agent_compute_speed))
-			return 0;
-
-		return l_local_agent_compute_speed / l_total_compute_speed;
-
-	};
-
-	l_agent.disclose_agent_information();
-
-	std::vector<std::pair<adsl::param_vector_information, adsl::param_vector_information>> l_synchronization_requests;
-	affix_base::data::ptr<adsl::param_vector_information> l_synchronized;
-
-	l_agent.add_function("request_synchronize",
-		std::function([&](std::string, adsl::param_vector_information a_param_vector_information, adsl::param_vector_information a_update_vector_information)
+		if (!std::filesystem::exists("config/"))
+			std::filesystem::create_directory("config/");
+		affix_base::data::ptr<affix_services::client_configuration> l_client_configuration(new affix_services::client_configuration("config/client_configuration.json"));
+		l_client_configuration->import_resource();
+		l_client_configuration->export_resource();
+		m_client = new affix_services::client(m_io_context, l_client_configuration);
+		m_agent = new affix_services::agent<double, std::string>(*m_client, "adsl-example", get_absolute_compute_speed());
+		m_agent->add_function("request_synchronize",
+			std::function([&](
+				std::string a_remote_client_identity,
+				adsl::param_vector_information a_param_vector_information,
+				adsl::param_vector_information a_update_vector_information
+			)
 			{
-				l_synchronization_requests.push_back({ a_param_vector_information, a_update_vector_information });
+				m_synchronization_requests.push_back({ a_param_vector_information, a_update_vector_information });
 			}));
 
-	l_agent.add_function("response_synchronize",
-		std::function([&](std::string, adsl::param_vector_information a_param_vector_information)
-			{
-				l_synchronized = new adsl::param_vector_information(a_param_vector_information);
-			}));
+		m_agent->disclose_agent_information();
 
-	auto l_synchronize = [&]() -> adsl::param_vector_information
+		m_background_thread_continue = true;
+
+		m_asio_thread = std::thread(
+			[&]
+			{
+				while (m_background_thread_continue)
+				{
+					m_io_context.run();
+					m_io_context.reset();
+				}
+			});
+
+		m_affix_services_thread = std::thread(
+			[&]
+			{
+				while (m_background_thread_continue)
+				{
+					m_client->process();
+					m_agent->process();
+
+					std::scoped_lock l_lock(m_agent->m_guarded_data);
+
+					if (m_synchronization_requests.size() >= m_agent->m_guarded_data->m_registered_agents.size())
+					{
+						m_agent->invoke_on_all("response_synchronize", process_synchronization_requests());
+					}
+				}
+			});
+
+	}
+
+	/// <summary>
+	/// Returns an updated param_vector_information object.
+	/// </summary>
+	/// <param name="a_param_vector_information"></param>
+	/// <param name="a_update_vector_information"></param>
+	adsl::param_vector_information synchronize(
+		const adsl::param_vector_information& a_param_vector_information,
+		const adsl::param_vector_information& a_update_vector_information
+	)
 	{
+		volatile bool l_result_received = false;
 		adsl::param_vector_information l_result;
 
-		// Gets the basis for synchronization based on most sophisticated param vector.
-		for (const auto& i : l_synchronization_requests)
-		{
-			if (i.first.m_training_sets_digested >= l_result.m_training_sets_digested)
-				l_result = i.first;
-		}
-
-		for (const auto& l_synchronization_request : l_synchronization_requests)
-		{
-			if (std::equal(
-				l_synchronization_request.first.m_param_vector.begin(), l_synchronization_request.first.m_param_vector.end(),
-				l_result.m_param_vector.begin(), l_result.m_param_vector.end()) &&
-				l_synchronization_request.second.m_param_vector.size() == l_result.m_param_vector.size())
-			{
-				for (int i = 0; i < l_synchronization_request.first.m_param_vector.size(); i++)
+		m_agent->add_function("response_synchronize",
+			std::function([&](
+				std::string a_remote_client_identity,
+				adsl::param_vector_information a_synchronization_result
+				)
 				{
-					l_result.m_param_vector[i] -= 0.002 * l_synchronization_request.second.m_param_vector[i];
-				}
-				l_result.m_training_sets_digested += l_synchronization_request.second.m_training_sets_digested;
-			}
-		}
+					l_result = a_synchronization_result;
+					l_result_received = true;
+				}));
 
-		l_synchronization_requests.clear();
-
-		return l_result;
-
-	};
-
-	std::thread l_thread(
-		[&]
-		{
-			while (true)
-			{
-				l_context.run();
-				l_context.reset();
-			}
-		});
-
-	std::thread l_thread_2(
-		[&]
-		{
-			while (true)
-			{
-				l_client.process();
-				l_agent.process();
-
-				std::scoped_lock l_lock(l_agent.m_guarded_data);
-
-				if (l_synchronization_requests.size() >= l_agent.m_guarded_data->m_registered_agents.size())
-				{
-					l_agent.invoke_on_all("response_synchronize", l_synchronize());
-				}
-			}
-		});
-
-	adsl::param_vector_information l_param_vector_information;
-	adsl::param_vector_information l_update_vector_information;
-
-	auto l_synchronize_with_dl = [&]
-	{
-		l_synchronized = nullptr;
-		
 		std::string l_previous_distribution_lead;
 
-		while (l_synchronized == nullptr)
+		while (!l_result_received)
 		{
-			std::string l_current_distribution_lead = l_agent.largest_identity();
+			std::string l_current_distribution_lead = m_agent->largest_identity();
 
 			if (l_current_distribution_lead != l_previous_distribution_lead)
 			{
 				l_previous_distribution_lead = l_current_distribution_lead;
-
-				l_agent.invoke(l_previous_distribution_lead, "request_synchronize", l_param_vector_information, l_update_vector_information);
+				
+				m_agent->invoke(l_previous_distribution_lead, "request_synchronize",
+					a_param_vector_information,
+					a_update_vector_information
+				);
 
 			}
 
 		}
 
-	};
+		m_agent->remove_function("response_synchronize");
 
+		return l_result;
 
+	}
 
+	size_t training_sets_to_digest_count(
 
-	// Create param vector
-	aurora::params::param_vector l_pv;
-
-	auto l_import_params = [&]
+	)
 	{
-		for (int i = 0; i < l_pv.size(); i++)
-			l_pv[i]->state() = l_param_vector_information.m_param_vector[i];
-	};
+		std::scoped_lock l_lock(m_agent->m_guarded_data);
 
-	auto l_export_params = [&]
-	{
-		l_param_vector_information.m_param_vector.resize(l_pv.size());
-		for (int i = 0; i < l_pv.size(); i++)
-			l_param_vector_information.m_param_vector[i] = l_pv[i]->state();
-	};
+		double l_total_absolute_compute_speed = 0;
 
-	auto l_export_gradient = [&]
-	{
-		l_update_vector_information.m_param_vector.resize(l_pv.size());
-		for (int i = 0; i < l_pv.size(); i++)
+		for (auto i : m_agent->m_guarded_data->m_registered_agents)
 		{
-			l_update_vector_information.m_param_vector[i] = ((aurora::params::param_sgd*)l_pv[i])->gradient();
-			((aurora::params::param_sgd*)l_pv[i])->gradient() = 0;
+			double l_registered_agent_compute_speed = 0;
+			if (!i.second.get_parsed_agent_specific_information(l_registered_agent_compute_speed))
+				continue;
+			l_total_absolute_compute_speed += l_registered_agent_compute_speed;
 		}
+
+		double l_local_absolute_compute_speed = 0;
+
+		if (!m_agent->m_guarded_data->m_local_agent_information.get_parsed_agent_specific_information(l_local_absolute_compute_speed) ||
+			l_total_absolute_compute_speed == 0)
+			return 0;
+
+		return
+			(double)m_ideal_mini_batch_size *
+			(double)m_agent->m_guarded_data->m_registered_agents.size() *
+			l_local_absolute_compute_speed /
+			l_total_absolute_compute_speed;
+	}
+
+	void update_agent_specific_information(
+
+	)
+	{
+		if (!m_agent->m_guarded_data->m_local_agent_information.set_parsed_agent_specific_information(get_absolute_compute_speed()))
+			return;
+
+		m_agent->disclose_agent_information();
+
+	}
+
+protected:
+	double get_absolute_compute_speed(
+
+	)
+	{
+		aurora::params::param_vector l_pv;
+
+		aurora::models::Model l_model = aurora::pseudo::tnn({ 2, 5, 1 }, aurora::pseudo::nlr(0.3));
+
+		aurora::models::Mse_loss l_mse_loss = new aurora::models::mse_loss(l_model);
+
+		l_mse_loss->param_recur(aurora::pseudo::param_init(new aurora::params::param_sgd(0.02), l_pv));
+
+		l_mse_loss->compile();
+
+		l_pv.rand_norm();
+
+		aurora::maths::tensor x = {
+			{0.1, 0},
+			{0, 1},
+			{1, 0},
+			{1, 1}
+		};
+
+		aurora::maths::tensor y = {
+			{0},
+			{1},
+			{1},
+			{0}
+		};
+
+		const int l_ITERATIONS = 100000;
+
+		affix_base::timing::stopwatch l_stopwatch;
+
+		l_stopwatch.start();
+
+		for (int epoch = 0; epoch < l_ITERATIONS; epoch++)
+		{
+			l_mse_loss->cycle(x[0], y[0]);
+			l_mse_loss->cycle(x[1], y[1]);
+			l_mse_loss->cycle(x[2], y[2]);
+			l_mse_loss->cycle(x[3], y[3]);
+			l_pv.update();
+		}
+
+		return (double)l_ITERATIONS / (double)l_stopwatch.duration_microseconds();
+
+	}
+
+	adsl::param_vector_information process_synchronization_requests(
+
+	)
+	{
+		adsl::param_vector_information l_result;
+
+		// Select a synchronization base
+		for (auto i : m_synchronization_requests)
+		{
+			if (i.first.m_training_sets_digested >= l_result.m_training_sets_digested)
+			{
+				l_result = i.first;
+			}
+		}
+
+		for (auto l_request : m_synchronization_requests)
+		{
+			if (std::equal(
+					l_request.first.m_param_vector.begin(), l_request.first.m_param_vector.end(),
+					l_result.m_param_vector.begin(), l_result.m_param_vector.end()) &&
+				l_request.second.m_param_vector.size() == l_result.m_param_vector.size())
+			{
+				for (int i = 0; i < l_request.second.m_param_vector.size(); i++)
+					l_result.m_param_vector[i] -= m_learn_rate * l_request.second.m_param_vector[i];
+				l_result.m_training_sets_digested += l_request.second.m_training_sets_digested;
+			}
+		}
+
+		m_synchronization_requests.clear();
+
+		return l_result;
+
+	}
+
+
+};
+
+void send_state_to_param_vector_information(
+	const aurora::params::param_vector& a_param_vector,
+	adsl::param_vector_information& a_param_vector_information
+)
+{
+	a_param_vector_information.m_param_vector.resize(a_param_vector.size());
+	for (int i = 0; i < a_param_vector.size(); i++)
+		a_param_vector_information.m_param_vector[i] = a_param_vector[i]->state();
+}
+
+void send_state_to_param_vector(
+	const adsl::param_vector_information& a_param_vector_information,
+	aurora::params::param_vector& a_param_vector
+)
+{
+	for (int i = 0; i < a_param_vector_information.m_param_vector.size(); i++)
+		a_param_vector[i]->state() = a_param_vector_information.m_param_vector[i];
+}
+
+void send_gradient_to_param_vector_information(
+	const aurora::params::param_vector& a_param_vector,
+	adsl::param_vector_information& a_param_vector_information
+)
+{
+	a_param_vector_information.m_param_vector.resize(a_param_vector.size());
+	for (int i = 0; i < a_param_vector.size(); i++)
+	{
+		aurora::params::param_sgd* l_param = a_param_vector[i];
+		a_param_vector_information.m_param_vector[i] = l_param->gradient();
+		l_param->gradient() = 0;
+	}
+}
+
+void get_random_training_set_from_disk(
+	aurora::maths::tensor& a_x,
+	aurora::maths::tensor& a_y
+)
+{
+	CryptoPP::AutoSeededRandomPool l_random;
+
+	while (true)
+	{
+		int l_training_set_count = 0;
+
+		for (auto i : std::filesystem::directory_iterator("training_data/"))
+			l_training_set_count++;
+
+		if (l_training_set_count == 0)
+			continue;
+
+		int l_training_set_index = l_random.GenerateWord32(0, l_training_set_count - 1);
+
+		auto l_iterator = std::filesystem::directory_iterator("training_data/");
+		std::advance(l_iterator, l_training_set_index);
+
+		aurora::maths::tensor l_training_set;
+
+		if (affix_base::files::file_read(l_iterator->path().u8string(), l_training_set))
+		{
+			a_x = l_training_set[0];
+			a_y = l_training_set[1];
+			return;
+		}
+
+	}
+}
+
+int main(
+
+)
+{
+	/*aurora::maths::tensor l_training_sets = {
+		{ {0, 0}, {0} },
+		{ {0, 1}, {1} },
+		{ {1, 0}, {1} },
+		{ {1, 1}, {0} }
 	};
 
+	for (int i = 0; i < l_training_sets.size(); i++)
+	{
+		affix_base::files::file_write("training_data/" + std::to_string(i), l_training_sets[i]);
+	}
 
+	return 0;*/
 
-	// Create model
-	aurora::models::Mse_loss l_mse_loss(aurora::pseudo::tnn({ 2, 5, 1 }, aurora::pseudo::nlr(0.3)));
+	aurora::params::param_vector l_param_vector;
 
-	l_mse_loss->param_recur(aurora::pseudo::param_init(new aurora::params::param_sgd(0.02), l_pv));
+	aurora::models::Model l_model = aurora::pseudo::tnn({ 2, 5, 1 }, aurora::pseudo::nlr(0.3));
+
+	aurora::models::Mse_loss l_mse_loss = new aurora::models::mse_loss(l_model);
+
+	l_mse_loss->param_recur(aurora::pseudo::param_init(new aurora::params::param_sgd(0.02), l_param_vector));
 
 	l_mse_loss->compile();
 
+	adsl::param_vector_information l_param_vector_information;
 
-	// Import params from file
 	if (affix_base::files::file_read("config/param_vector.bin", l_param_vector_information) &&
-		l_param_vector_information.m_param_vector.size() == l_pv.size())
+		l_param_vector.size() == l_param_vector_information.m_param_vector.size())
 	{
-		l_import_params();
+		send_state_to_param_vector(l_param_vector_information, l_param_vector);
 	}
 	else
 	{
-		l_pv.rand_norm();
-		l_export_params();
+		l_param_vector.rand_norm();
+		send_state_to_param_vector_information(l_param_vector, l_param_vector_information);
 	}
 
-	for (int i = 0; true; i++)
+	adsl::param_vector_information l_update_vector_information;
+
+	trainer l_trainer(20, 0.002);
+
+	for (int epoch = 0; true; epoch++)
 	{
-		l_synchronize_with_dl();
+		l_param_vector_information = l_trainer.synchronize(l_param_vector_information, l_update_vector_information);
+
 		affix_base::files::file_write("config/param_vector.bin", l_param_vector_information);
-		l_import_params();
+
+		send_state_to_param_vector(l_param_vector_information, l_param_vector);
+
+		size_t l_training_sets_to_digest_count = l_trainer.training_sets_to_digest_count();
 
 		double l_cost = 0;
-		aurora::maths::tensor x = { 0,0 };
-		aurora::maths::tensor y = { 0 };
-		l_cost += l_mse_loss->cycle(x, y);
-		l_cost += l_mse_loss->cycle({ 0, 1 }, { 1 });
-		l_cost += l_mse_loss->cycle({ 1, 0 }, { 1 });
-		l_cost += l_mse_loss->cycle({ 1, 1 }, { 0 });
 
-		if (i % 10 == 0)
+		for (int i = 0; i < l_training_sets_to_digest_count; i++)
+		{
+			// GET A TRAINING SET FROM DISK
+			aurora::maths::tensor l_x;
+			aurora::maths::tensor l_y;
+			get_random_training_set_from_disk(l_x, l_y);
+
+			// TRAIN (CYCLE) THE TRAINING SET
+			l_cost += l_mse_loss->cycle(l_x, l_y);
+
+		}
+
+		l_update_vector_information.m_training_sets_digested = l_training_sets_to_digest_count;
+
+		// SEND UPDATE INFORMATION TO EXPORTABLE VECTOR. THIS ALSO CLEARS THE PARAM_VECTOR GRADIENT
+		send_gradient_to_param_vector_information(l_param_vector, l_update_vector_information);
+
+		if (epoch % 100 == 0)
 			std::cout << l_cost << std::endl;
 
-		l_param_vector_information = *l_synchronized;
-		l_export_gradient();
-		l_update_vector_information.m_training_sets_digested += 4;
 	}
 
 	return 0;
+
 }
