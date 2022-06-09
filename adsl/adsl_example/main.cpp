@@ -103,21 +103,45 @@ public:
 	/// </summary>
 	/// <param name="a_param_vector_information"></param>
 	/// <param name="a_update_vector_information"></param>
-	bool synchronize(
-		aurora::params::param_vector& a_param_vector
+	void synchronize(
+		aurora::params::param_vector& a_param_vector,
+		uint64_t& a_previous_training_sets_digested,
+		const uint64_t& a_last_epoch_training_sets_digested
 	)
 	{
-		bool l_contacted_distribution_lead = false;
 		adsl::param_vector_information l_result;
+		bool l_contacted_distribution_lead = false;
 
 		adsl::param_vector_information l_request_param_vector;
 		adsl::param_vector_information l_request_update_vector;
 
+		// Export a_param_vector into individual param_vector_information objects
+		l_request_param_vector.m_param_vector.resize(a_param_vector.size());
+		l_request_update_vector.m_param_vector.resize(a_param_vector.size());
+		for (int i = 0; i < a_param_vector.size(); i++)
+		{
+			aurora::params::param_sgd* l_param = a_param_vector[i];
+			l_request_param_vector.m_param_vector[i] = l_param->state();
+			l_request_update_vector.m_param_vector[i] = l_param->gradient();
+			l_param->gradient() = 0;
+		}
+		l_request_param_vector.m_training_sets_digested = a_previous_training_sets_digested;
+		l_request_update_vector.m_training_sets_digested = a_last_epoch_training_sets_digested;
+
+
+		// LOOP UNTIL WE CONTACT THE DISTRIBUTION LEAD SUCCESSFULLY
 		while (
-			!m_agent->synchronize(m_agent->largest_identity(), "request_synchronize", "response_synchronize", std::make_tuple(), std::forward_as_tuple(l_result, l_contacted_distribution_lead)) ||
+			!m_agent->synchronize(m_agent->largest_identity(), "request_synchronize", "response_synchronize",
+				std::make_tuple(l_request_param_vector, l_request_update_vector),
+				std::forward_as_tuple(l_result, l_contacted_distribution_lead)) ||
 			l_contacted_distribution_lead == false);
 
-		
+		// Export new information back out of function
+		for (int i = 0; i < l_result.m_param_vector.size(); i++)
+		{
+			a_param_vector[i]->state() = l_result.m_param_vector[i];
+		}
+		a_previous_training_sets_digested = l_result.m_training_sets_digested;
 
 	}
 
@@ -248,39 +272,6 @@ protected:
 
 };
 
-void send_state_to_param_vector_information(
-	const aurora::params::param_vector& a_param_vector,
-	adsl::param_vector_information& a_param_vector_information
-)
-{
-	a_param_vector_information.m_param_vector.resize(a_param_vector.size());
-	for (int i = 0; i < a_param_vector.size(); i++)
-		a_param_vector_information.m_param_vector[i] = a_param_vector[i]->state();
-}
-
-void send_state_to_param_vector(
-	const adsl::param_vector_information& a_param_vector_information,
-	aurora::params::param_vector& a_param_vector
-)
-{
-	for (int i = 0; i < a_param_vector_information.m_param_vector.size(); i++)
-		a_param_vector[i]->state() = a_param_vector_information.m_param_vector[i];
-}
-
-void send_gradient_to_param_vector_information(
-	const aurora::params::param_vector& a_param_vector,
-	adsl::param_vector_information& a_param_vector_information
-)
-{
-	a_param_vector_information.m_param_vector.resize(a_param_vector.size());
-	for (int i = 0; i < a_param_vector.size(); i++)
-	{
-		aurora::params::param_sgd* l_param = a_param_vector[i];
-		a_param_vector_information.m_param_vector[i] = l_param->gradient();
-		l_param->gradient() = 0;
-	}
-}
-
 void get_random_training_set_from_disk(
 	aurora::maths::tensor& a_x,
 	aurora::maths::tensor& a_y
@@ -343,36 +334,39 @@ int main(
 
 	l_mse_loss->compile();
 
-	adsl::param_vector_information l_param_vector_information;
+	uint64_t l_param_vector_training_sets_digested = 0;
 
-	if (affix_base::files::file_read("config/param_vector.bin", l_param_vector_information) &&
-		l_param_vector.size() == l_param_vector_information.m_param_vector.size())
 	{
-		send_state_to_param_vector(l_param_vector_information, l_param_vector);
-	}
-	else
-	{
-		l_param_vector.rand_norm();
-		send_state_to_param_vector_information(l_param_vector, l_param_vector_information);
-	}
+		aurora::maths::tensor l_param_vector_tensor;
 
-	adsl::param_vector_information l_update_vector_information;
+		if (affix_base::files::file_read("config/param_vector_tensor.bin", l_param_vector_tensor) &&
+			affix_base::files::file_read("config/param_vector_training_sets_digested.bin", l_param_vector_training_sets_digested) &&
+			l_param_vector.size() == l_param_vector_tensor.size())
+		{
+			l_param_vector.pop(l_param_vector_tensor);
+		}
+		else
+		{
+			l_param_vector.rand_norm();
+		}
+	}
 
 	trainer l_trainer(20, 0.002);
 
+	uint64_t l_epoch_training_sets_digested = 0;
+
 	for (int epoch = 0; true; epoch++)
 	{
-		l_param_vector_information = l_trainer.synchronize(l_param_vector_information, l_update_vector_information);
+		l_trainer.synchronize(l_param_vector, l_param_vector_training_sets_digested, l_epoch_training_sets_digested);
 
-		affix_base::files::file_write("config/param_vector.bin", l_param_vector_information);
+		affix_base::files::file_write("config/param_vector_tensor.bin", (aurora::maths::tensor)l_param_vector);
+		affix_base::files::file_write("config/param_vector_training_sets_digested.bin", l_param_vector_training_sets_digested);
 
-		send_state_to_param_vector(l_param_vector_information, l_param_vector);
-
-		size_t l_training_sets_to_digest_count = l_trainer.training_sets_to_digest_count();
+		l_epoch_training_sets_digested = l_trainer.training_sets_to_digest_count();
 
 		double l_cost = 0;
 
-		for (int i = 0; i < l_training_sets_to_digest_count; i++)
+		for (int i = 0; i < l_epoch_training_sets_digested; i++)
 		{
 			// GET A TRAINING SET FROM DISK
 			aurora::maths::tensor l_x;
@@ -383,11 +377,6 @@ int main(
 			l_cost += l_mse_loss->cycle(l_x, l_y);
 
 		}
-
-		l_update_vector_information.m_training_sets_digested = l_training_sets_to_digest_count;
-
-		// SEND UPDATE INFORMATION TO EXPORTABLE VECTOR. THIS ALSO CLEARS THE PARAM_VECTOR GRADIENT
-		send_gradient_to_param_vector_information(l_param_vector, l_update_vector_information);
 
 		if (epoch % 100 == 0)
 			std::cout << l_cost << std::endl;
