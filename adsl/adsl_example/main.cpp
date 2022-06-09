@@ -103,46 +103,21 @@ public:
 	/// </summary>
 	/// <param name="a_param_vector_information"></param>
 	/// <param name="a_update_vector_information"></param>
-	adsl::param_vector_information synchronize(
-		const adsl::param_vector_information& a_param_vector_information,
-		const adsl::param_vector_information& a_update_vector_information
+	bool synchronize(
+		aurora::params::param_vector& a_param_vector
 	)
 	{
-		volatile bool l_result_received = false;
+		bool l_contacted_distribution_lead = false;
 		adsl::param_vector_information l_result;
 
-		m_agent->add_function("response_synchronize",
-			std::function([&](
-				std::string a_remote_client_identity,
-				adsl::param_vector_information a_synchronization_result
-				)
-				{
-					l_result = a_synchronization_result;
-					l_result_received = true;
-				}));
+		adsl::param_vector_information l_request_param_vector;
+		adsl::param_vector_information l_request_update_vector;
 
-		std::string l_previous_distribution_lead;
+		while (
+			!m_agent->synchronize(m_agent->largest_identity(), "request_synchronize", "response_synchronize", std::make_tuple(), std::forward_as_tuple(l_result, l_contacted_distribution_lead)) ||
+			l_contacted_distribution_lead == false);
 
-		while (!l_result_received)
-		{
-			std::string l_current_distribution_lead = m_agent->largest_identity();
-
-			if (l_current_distribution_lead != l_previous_distribution_lead)
-			{
-				l_previous_distribution_lead = l_current_distribution_lead;
-				
-				m_agent->invoke(l_previous_distribution_lead, "request_synchronize",
-					a_param_vector_information,
-					a_update_vector_information
-				);
-
-			}
-
-		}
-
-		m_agent->remove_function("response_synchronize");
-
-		return l_result;
+		
 
 	}
 
