@@ -146,7 +146,6 @@ public:
 		l_request_param_vector.m_training_sets_digested = a_previous_training_sets_digested;
 		l_request_update_vector.m_training_sets_digested = a_last_epoch_training_sets_digested;
 
-
 		// LOOP UNTIL WE CONTACT THE DISTRIBUTION LEAD SUCCESSFULLY
 		while (
 			!m_agent->synchronize(m_agent->largest_identity(), "request_synchronize", "response_synchronize",
