@@ -11,13 +11,19 @@
 class trainer
 {
 protected:
+	struct update_information
+	{
+		adsl::param_vector_information m_param_vector_information;
+		adsl::param_vector_information m_update_vector_information;
+	};
+
 	asio::io_context m_io_context;
 
 	affix_base::data::ptr<affix_services::client> m_client;
 
 	affix_base::data::ptr<affix_services::agent<double, std::string>> m_agent;
 
-	std::vector<std::pair<adsl::param_vector_information, adsl::param_vector_information>> m_synchronization_requests;
+	std::map<std::string, update_information> m_synchronization_requests;
 
 	volatile bool m_background_thread_continue = false;
 
@@ -61,9 +67,21 @@ public:
 				adsl::param_vector_information a_param_vector_information,
 				adsl::param_vector_information a_update_vector_information
 			)
-			{
-				m_synchronization_requests.push_back({ a_param_vector_information, a_update_vector_information });
-			}));
+				{
+					if (m_agent->largest_identity() != m_client->m_local_identity)
+					{
+						// The local client is not locally recognized as being the distribution lead
+						m_agent->invoke(
+							a_remote_client_identity,
+							"response_synchronize",
+							adsl::param_vector_information(),
+							false);
+						return;
+					}
+
+					m_synchronization_requests.insert(m_synchronization_requests.end(), { a_remote_client_identity, { a_param_vector_information, a_update_vector_information } });
+
+				}));
 
 		m_agent->disclose_agent_information();
 
@@ -91,7 +109,7 @@ public:
 
 					if (m_synchronization_requests.size() >= m_agent->m_guarded_data->m_registered_agents.size())
 					{
-						m_agent->invoke_on_all("response_synchronize", process_synchronization_requests());
+						m_agent->invoke_on_all("response_synchronize", process_synchronization_requests(), true);
 					}
 				}
 			});
@@ -142,6 +160,8 @@ public:
 			a_param_vector[i]->state() = l_result.m_param_vector[i];
 		}
 		a_previous_training_sets_digested = l_result.m_training_sets_digested;
+
+		m_synchronization_requests.clear();
 
 	}
 
@@ -244,22 +264,23 @@ protected:
 		// Select a synchronization base
 		for (auto i : m_synchronization_requests)
 		{
-			if (i.first.m_training_sets_digested >= l_result.m_training_sets_digested)
+			if (i.second.m_param_vector_information.m_training_sets_digested >= l_result.m_training_sets_digested)
 			{
-				l_result = i.first;
+				l_result = i.second.m_param_vector_information;
 			}
 		}
 
 		for (auto l_request : m_synchronization_requests)
 		{
 			if (std::equal(
-					l_request.first.m_param_vector.begin(), l_request.first.m_param_vector.end(),
+					l_request.second.m_param_vector_information.m_param_vector.begin(),
+					l_request.second.m_param_vector_information.m_param_vector.end(),
 					l_result.m_param_vector.begin(), l_result.m_param_vector.end()) &&
-				l_request.second.m_param_vector.size() == l_result.m_param_vector.size())
+				l_request.second.m_update_vector_information.m_param_vector.size() == l_result.m_param_vector.size())
 			{
-				for (int i = 0; i < l_request.second.m_param_vector.size(); i++)
-					l_result.m_param_vector[i] -= m_learn_rate * l_request.second.m_param_vector[i];
-				l_result.m_training_sets_digested += l_request.second.m_training_sets_digested;
+				for (int i = 0; i < l_request.second.m_update_vector_information.m_param_vector.size(); i++)
+					l_result.m_param_vector[i] -= m_learn_rate * l_request.second.m_update_vector_information.m_param_vector[i];
+				l_result.m_training_sets_digested += l_request.second.m_update_vector_information.m_training_sets_digested;
 			}
 		}
 
