@@ -66,7 +66,7 @@ public:
 				std::string a_remote_client_identity,
 				adsl::param_vector_information a_param_vector_information,
 				adsl::param_vector_information a_update_vector_information
-			)
+				)
 				{
 					if (m_agent->largest_identity() != m_client->m_local_identity)
 					{
@@ -75,7 +75,8 @@ public:
 							a_remote_client_identity,
 							"response_synchronize",
 							adsl::param_vector_information(),
-							false);
+							false
+						);
 						return;
 					}
 
@@ -292,58 +293,45 @@ protected:
 
 };
 
-void get_random_training_set_from_disk(
+bool get_random_training_set_from_disk(
 	aurora::maths::tensor& a_x,
 	aurora::maths::tensor& a_y
 )
 {
 	CryptoPP::AutoSeededRandomPool l_random;
 
-	while (true)
+	int l_training_set_count = 0;
+
+	for (auto i : std::filesystem::directory_iterator("training_data/"))
+		l_training_set_count++;
+
+	if (l_training_set_count == 0)
+		return false;
+
+	int l_training_set_index = l_random.GenerateWord32(0, l_training_set_count - 1);
+
+	auto l_iterator = std::filesystem::directory_iterator("training_data/");
+	std::advance(l_iterator, l_training_set_index);
+
+	aurora::maths::tensor l_training_set;
+
+	if (affix_base::files::file_read(l_iterator->path().u8string(), l_training_set))
 	{
-		int l_training_set_count = 0;
-
-		for (auto i : std::filesystem::directory_iterator("training_data/"))
-			l_training_set_count++;
-
-		if (l_training_set_count == 0)
-			continue;
-
-		int l_training_set_index = l_random.GenerateWord32(0, l_training_set_count - 1);
-
-		auto l_iterator = std::filesystem::directory_iterator("training_data/");
-		std::advance(l_iterator, l_training_set_index);
-
-		aurora::maths::tensor l_training_set;
-
-		if (affix_base::files::file_read(l_iterator->path().u8string(), l_training_set))
-		{
-			a_x = l_training_set[0];
-			a_y = l_training_set[1];
-			return;
-		}
-
+		a_x = l_training_set[0];
+		a_y = l_training_set[1];
+		return true;
 	}
+	else
+	{
+		return false;
+	}
+
 }
 
 int main(
 
 )
 {
-	/*aurora::maths::tensor l_training_sets = {
-		{ {0, 0}, {0} },
-		{ {0, 1}, {1} },
-		{ {1, 0}, {1} },
-		{ {1, 1}, {0} }
-	};
-
-	for (int i = 0; i < l_training_sets.size(); i++)
-	{
-		affix_base::files::file_write("training_data/" + std::to_string(i), l_training_sets[i]);
-	}
-
-	return 0;*/
-
 	aurora::params::param_vector l_param_vector;
 
 	aurora::models::Model l_model = aurora::pseudo::tnn({ 2, 5, 1 }, aurora::pseudo::nlr(0.3));
@@ -371,35 +359,70 @@ int main(
 		}
 	}
 
-	trainer l_trainer(20, 0.002);
+	trainer l_trainer(4, 0.02);
 
-	uint64_t l_epoch_training_sets_digested = 0;
+	size_t l_previous_global_training_sets_digested = 0;
 
 	for (int epoch = 0; true; epoch++)
 	{
-		l_trainer.synchronize(l_param_vector, l_param_vector_training_sets_digested, l_epoch_training_sets_digested);
+		// Stopwatch for timing the ENTIRE epoch.
+		affix_base::timing::stopwatch l_epoch_stopwatch;
 
-		affix_base::files::file_write("config/param_vector_tensor.bin", (aurora::maths::tensor)l_param_vector);
-		affix_base::files::file_write("config/param_vector_training_sets_digested.bin", l_param_vector_training_sets_digested);
-
-		l_epoch_training_sets_digested = l_trainer.training_sets_to_digest_count();
-
+		// Start the stopwatch
+		l_epoch_stopwatch.start();
+		
 		double l_cost = 0;
 
-		for (int i = 0; i < l_epoch_training_sets_digested; i++)
+		// Stopwatch for the training session inside this epoch.
+		affix_base::timing::stopwatch l_training_stopwatch;
+
+		// Start the training session stopwatch.
+		l_training_stopwatch.start();
+		
+		size_t l_training_sets_to_digest = l_trainer.training_sets_to_digest_count();
+
+		for (int i = 0; i < l_training_sets_to_digest; i++)
 		{
 			// GET A TRAINING SET FROM DISK
 			aurora::maths::tensor l_x;
 			aurora::maths::tensor l_y;
-			get_random_training_set_from_disk(l_x, l_y);
+
+			if (!get_random_training_set_from_disk(l_x, l_y))
+			{
+				std::cout << "Unable to get training set from disk." << std::endl;
+				break;
+			}
 
 			// TRAIN (CYCLE) THE TRAINING SET
 			l_cost += l_mse_loss->cycle(l_x, l_y);
 
 		}
 
+		l_trainer.synchronize(l_param_vector, l_param_vector_training_sets_digested, l_training_sets_to_digest);
+
+		affix_base::files::file_write("config/param_vector_tensor.bin", (aurora::maths::tensor)l_param_vector);
+		affix_base::files::file_write("config/param_vector_training_sets_digested.bin", l_param_vector_training_sets_digested);
+
 		if (epoch % 100 == 0)
-			std::cout << l_cost << std::endl;
+		{
+			double l_epoch_period_in_ms = l_epoch_stopwatch.duration_milliseconds();
+			double l_training_period_in_ms = l_training_stopwatch.duration_milliseconds();
+			double l_synchronizing_period_in_ms = l_epoch_period_in_ms - l_training_period_in_ms;
+			double l_last_epoch_global_digest = l_param_vector_training_sets_digested - l_previous_global_training_sets_digested;
+			double l_last_epoch_global_digest_rate = l_last_epoch_global_digest / l_epoch_period_in_ms * 1000.0;
+			
+			std::cout << "ALL TIME GLOBAL DIGEST               : " << l_param_vector_training_sets_digested << std::endl;
+			std::cout << "LAST EPOCH LOCAL DIGEST              : " << l_training_sets_to_digest << std::endl;
+			std::cout << "LAST EPOCH GLOBAL DIGEST             : " << l_last_epoch_global_digest << std::endl;
+			std::cout << "LAST EPOCH LOCAL COST                : " << l_cost << std::endl;
+			std::cout << "LAST EPOCH GLOBAL DIGEST RATE        : " << l_last_epoch_global_digest_rate << std::endl;
+			std::cout << "LAST EPOCH TRAINING PERIOD IN ms     : " << l_epoch_period_in_ms << std::endl;
+			std::cout << "LAST EPOCH SYNCHRONIZING PERIOD IN ms: " << l_synchronizing_period_in_ms << std::endl;
+			std::cout << std::endl << std::endl;
+		}
+
+		// Save the current digest count for the parameter vector
+		l_previous_global_training_sets_digested = l_param_vector_training_sets_digested;
 
 	}
 
