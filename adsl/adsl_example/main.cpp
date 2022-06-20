@@ -290,7 +290,6 @@ protected:
 
 	}
 
-
 };
 
 bool get_random_training_set_from_disk(
@@ -403,21 +402,21 @@ int main(
 		affix_base::files::file_write("config/param_vector_tensor.bin", (aurora::maths::tensor)l_param_vector);
 		affix_base::files::file_write("config/param_vector_training_sets_digested.bin", l_param_vector_training_sets_digested);
 
-		if (epoch % 100 == 0)
+		if (epoch % 100 == 0 && epoch != 0)
 		{
 			double l_epoch_period_in_ms = l_epoch_stopwatch.duration_milliseconds();
 			double l_training_period_in_ms = l_training_stopwatch.duration_milliseconds();
 			double l_synchronizing_period_in_ms = l_epoch_period_in_ms - l_training_period_in_ms;
 			double l_last_epoch_global_digest = l_param_vector_training_sets_digested - l_previous_global_training_sets_digested;
-			double l_last_epoch_global_digest_rate = l_last_epoch_global_digest / l_epoch_period_in_ms * 1000.0;
+			double l_last_epoch_global_digest_rate_in_ts_per_s = l_last_epoch_global_digest / l_epoch_period_in_ms * 1000.0;
 			
-			std::cout << "ALL TIME GLOBAL DIGEST               : " << l_param_vector_training_sets_digested << std::endl;
-			std::cout << "LAST EPOCH LOCAL DIGEST              : " << l_training_sets_to_digest << std::endl;
-			std::cout << "LAST EPOCH GLOBAL DIGEST             : " << l_last_epoch_global_digest << std::endl;
-			std::cout << "LAST EPOCH LOCAL COST                : " << l_cost << std::endl;
-			std::cout << "LAST EPOCH GLOBAL DIGEST RATE        : " << l_last_epoch_global_digest_rate << std::endl;
-			std::cout << "LAST EPOCH TRAINING PERIOD IN ms     : " << l_epoch_period_in_ms << std::endl;
-			std::cout << "LAST EPOCH SYNCHRONIZING PERIOD IN ms: " << l_synchronizing_period_in_ms << std::endl;
+			std::cout << "ALL TIME GLOBAL DIGEST                   : " << l_param_vector_training_sets_digested << std::endl;
+			std::cout << "LAST EPOCH LOCAL DIGEST                  : " << l_training_sets_to_digest << std::endl;
+			std::cout << "LAST EPOCH GLOBAL DIGEST                 : " << l_last_epoch_global_digest << std::endl;
+			std::cout << "LAST EPOCH LOCAL COST                    : " << l_cost << std::endl;
+			std::cout << "LAST EPOCH GLOBAL DIGEST RATE IN TS PER S: " << l_last_epoch_global_digest_rate_in_ts_per_s << std::endl;
+			std::cout << "LAST EPOCH TRAINING PERIOD IN ms         : " << l_epoch_period_in_ms << std::endl;
+			std::cout << "LAST EPOCH SYNCHRONIZING PERIOD IN ms    : " << l_synchronizing_period_in_ms << std::endl;
 			std::cout << std::endl << std::endl;
 		}
 
