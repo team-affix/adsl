@@ -125,7 +125,7 @@ public:
 	void synchronize(
 		aurora::params::param_vector& a_param_vector,
 		uint64_t& a_previous_training_sets_digested,
-		const uint64_t& a_last_epoch_training_sets_digested
+		const uint64_t& a_current_epoch_training_sets_digested
 	)
 	{
 		adsl::param_vector_information l_result;
@@ -145,7 +145,7 @@ public:
 			l_param->gradient() = 0;
 		}
 		l_request_param_vector.m_training_sets_digested = a_previous_training_sets_digested;
-		l_request_update_vector.m_training_sets_digested = a_last_epoch_training_sets_digested;
+		l_request_update_vector.m_training_sets_digested = a_current_epoch_training_sets_digested;
 
 		// LOOP UNTIL WE CONTACT THE DISTRIBUTION LEAD SUCCESSFULLY
 		while (
@@ -333,16 +333,30 @@ int main(
 {
 	aurora::params::param_vector l_param_vector;
 
-	aurora::models::Model l_model = aurora::pseudo::tnn({ 2, 5, 1 }, aurora::pseudo::nlr(0.3));
+	const size_t X_UNITS = 3;
+	const size_t COMPUTATIONAL_UNITS = 128;
+	const size_t Y_UNITS = 10;
 
-	aurora::models::Mse_loss l_mse_loss = new aurora::models::mse_loss(l_model);
+	const size_t LSTM_STACK_HEIGHT = 3;
 
-	l_mse_loss->param_recur(aurora::pseudo::param_init(new aurora::params::param_sgd(0.02), l_param_vector));
+	const size_t MAXIMUM_TIMESTEPS = 200;
+
+	aurora::models::Sync l_start_sync(new aurora::models::sync(aurora::pseudo::tnn({ X_UNITS, COMPUTATIONAL_UNITS }, aurora::pseudo::nlr(0.3))));
+	aurora::models::Stacked_recurrent l_lstm_stack(aurora::pseudo::lstm_stacked(COMPUTATIONAL_UNITS, LSTM_STACK_HEIGHT));
+	aurora::models::Sync l_end_sync(new aurora::models::sync(aurora::pseudo::tnn({ COMPUTATIONAL_UNITS, Y_UNITS }, aurora::pseudo::nsm())));
+
+	aurora::models::Stacked_recurrent l_full_stack(new aurora::models::stacked_recurrent({ l_start_sync, l_lstm_stack, l_end_sync }));
+
+	l_full_stack->param_recur(aurora::pseudo::param_init(new aurora::params::param_mom(0.02, 0.9), l_param_vector));
+	l_full_stack->prep(MAXIMUM_TIMESTEPS);
+
+	aurora::models::Mse_loss l_mse_loss(new aurora::models::mse_loss(l_full_stack));
 
 	l_mse_loss->compile();
 
 	uint64_t l_param_vector_training_sets_digested = 0;
 
+	// Read / randomly initialize parameters
 	{
 		aurora::maths::tensor l_param_vector_tensor;
 
@@ -410,13 +424,13 @@ int main(
 			double l_last_epoch_global_digest = l_param_vector_training_sets_digested - l_previous_global_training_sets_digested;
 			double l_last_epoch_global_digest_rate_in_ts_per_s = l_last_epoch_global_digest / l_epoch_period_in_ms * 1000.0;
 			
-			std::cout << "ALL TIME GLOBAL DIGEST                   : " << l_param_vector_training_sets_digested << std::endl;
-			std::cout << "LAST EPOCH LOCAL DIGEST                  : " << l_training_sets_to_digest << std::endl;
-			std::cout << "LAST EPOCH GLOBAL DIGEST                 : " << l_last_epoch_global_digest << std::endl;
-			std::cout << "LAST EPOCH LOCAL COST                    : " << l_cost << std::endl;
-			std::cout << "LAST EPOCH GLOBAL DIGEST RATE IN TS PER S: " << l_last_epoch_global_digest_rate_in_ts_per_s << std::endl;
-			std::cout << "LAST EPOCH TRAINING PERIOD IN ms         : " << l_epoch_period_in_ms << std::endl;
-			std::cout << "LAST EPOCH SYNCHRONIZING PERIOD IN ms    : " << l_synchronizing_period_in_ms << std::endl;
+			std::cout << "ALL TIME GLOBAL DIGEST               : " << l_param_vector_training_sets_digested << std::endl;
+			std::cout << "LAST EPOCH LOCAL DIGEST              : " << l_training_sets_to_digest << std::endl;
+			std::cout << "LAST EPOCH GLOBAL DIGEST             : " << l_last_epoch_global_digest << std::endl;
+			std::cout << "LAST EPOCH LOCAL COST                : " << l_cost << std::endl;
+			std::cout << "LAST EPOCH GLOBAL DIGEST RATE IN t/s : " << l_last_epoch_global_digest_rate_in_ts_per_s << std::endl;
+			std::cout << "LAST EPOCH TRAINING PERIOD IN ms     : " << l_epoch_period_in_ms << std::endl;
+			std::cout << "LAST EPOCH SYNCHRONIZING PERIOD IN ms: " << l_synchronizing_period_in_ms << std::endl;
 			std::cout << std::endl << std::endl;
 		}
 
