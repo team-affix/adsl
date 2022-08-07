@@ -331,113 +331,115 @@ int main(
 
 )
 {
-	aurora::params::param_vector l_param_vector;
+//	aurora::params::param_vector l_param_vector;
+//
+//	const size_t X_UNITS = 3;
+//	const size_t COMPUTATIONAL_UNITS = 128;
+//	const size_t Y_UNITS = 10;
+//
+//	const size_t LSTM_STACK_HEIGHT = 3;
+//
+//	const size_t MAXIMUM_TIMESTEPS = 200;
+//
+//	aurora::models::Sync l_start_sync(new aurora::models::sync(aurora::pseudo::tnn({ X_UNITS, COMPUTATIONAL_UNITS }, aurora::pseudo::nlr(0.3))));
+//	aurora::models::Stacked_recurrent l_lstm_stack(aurora::pseudo::lstm_stacked(COMPUTATIONAL_UNITS, LSTM_STACK_HEIGHT));
+//	aurora::models::Sync l_end_sync(new aurora::models::sync(aurora::pseudo::tnn({ COMPUTATIONAL_UNITS, Y_UNITS }, aurora::pseudo::nsm())));
+//
+//	aurora::models::Stacked_recurrent l_full_stack(new aurora::models::stacked_recurrent({ l_start_sync, l_lstm_stack, l_end_sync }));
+//
+//	l_full_stack->param_recur(aurora::pseudo::param_init(new aurora::params::param_mom(0.02, 0.9), l_param_vector));
+//	l_full_stack->prep(MAXIMUM_TIMESTEPS);
+//
+//	aurora::models::Mse_loss l_mse_loss(new aurora::models::mse_loss(l_full_stack));
+//
+//	l_mse_loss->compile();
+//
+//	uint64_t l_param_vector_training_sets_digested = 0;
+//
+//	// Read / randomly initialize parameters
+//	{
+//		aurora::maths::tensor l_param_vector_tensor;
+//
+//		if (affix_base::files::file_read("config/param_vector_tensor.bin", l_param_vector_tensor) &&
+//			affix_base::files::file_read("config/param_vector_training_sets_digested.bin", l_param_vector_training_sets_digested) &&
+//			l_param_vector.size() == l_param_vector_tensor.size())
+//		{
+//			l_param_vector.pop(l_param_vector_tensor);
+//		}
+//		else
+//		{
+//			l_param_vector.rand_norm();
+//		}
+//	}
+//
+//	trainer l_trainer(4, 0.02);
+//
+//	size_t l_previous_global_training_sets_digested = 0;
+//
+//	for (int epoch = 0; true; epoch++)
+//	{
+//		// Stopwatch for timing the ENTIRE epoch.
+//		affix_base::timing::stopwatch l_epoch_stopwatch;
+//
+//		// Start the stopwatch
+//		l_epoch_stopwatch.start();
+//		
+//		double l_cost = 0;
+//
+//		// Stopwatch for the training session inside this epoch.
+//		affix_base::timing::stopwatch l_training_stopwatch;
+//
+//		// Start the training session stopwatch.
+//		l_training_stopwatch.start();
+//		
+//		size_t l_training_sets_to_digest = l_trainer.training_sets_to_digest_count();
+//
+//		for (int i = 0; i < l_training_sets_to_digest; i++)
+//		{
+//			// GET A TRAINING SET FROM DISK
+//			aurora::maths::tensor l_x;
+//			aurora::maths::tensor l_y;
+//
+//			if (!get_random_training_set_from_disk(l_x, l_y))
+//			{
+//				std::cout << "Unable to get training set from disk." << std::endl;
+//				break;
+//			}
+//
+//			// TRAIN (CYCLE) THE TRAINING SET
+//			l_cost += l_mse_loss->cycle(l_x, l_y);
+//
+//		}
+//
+//		l_trainer.synchronize(l_param_vector, l_param_vector_training_sets_digested, l_training_sets_to_digest);
+//
+//		affix_base::files::file_write("config/param_vector_tensor.bin", (aurora::maths::tensor)l_param_vector);
+//		affix_base::files::file_write("config/param_vector_training_sets_digested.bin", l_param_vector_training_sets_digested);
+//
+//		if (epoch % 100 == 0 && epoch != 0)
+//		{
+//			double l_epoch_period_in_ms = l_epoch_stopwatch.duration_milliseconds();
+//			double l_training_period_in_ms = l_training_stopwatch.duration_milliseconds();
+//			double l_synchronizing_period_in_ms = l_epoch_period_in_ms - l_training_period_in_ms;
+//			double l_last_epoch_global_digest = l_param_vector_training_sets_digested - l_previous_global_training_sets_digested;
+//			double l_last_epoch_global_digest_rate_in_ts_per_s = l_last_epoch_global_digest / l_epoch_period_in_ms * 1000.0;
+//			
+//			std::cout << "ALL TIME GLOBAL DIGEST               : " << l_param_vector_training_sets_digested << std::endl;
+//			std::cout << "LAST EPOCH LOCAL DIGEST              : " << l_training_sets_to_digest << std::endl;
+//			std::cout << "LAST EPOCH GLOBAL DIGEST             : " << l_last_epoch_global_digest << std::endl;
+//			std::cout << "LAST EPOCH LOCAL COST                : " << l_cost << std::endl;
+//			std::cout << "LAST EPOCH GLOBAL DIGEST RATE IN t/s : " << l_last_epoch_global_digest_rate_in_ts_per_s << std::endl;
+//			std::cout << "LAST EPOCH TRAINING PERIOD IN ms     : " << l_epoch_period_in_ms << std::endl;
+//			std::cout << "LAST EPOCH SYNCHRONIZING PERIOD IN ms: " << l_synchronizing_period_in_ms << std::endl;
+//			std::cout << std::endl << std::endl;
+//		}
+//
+//		// Save the current digest count for the parameter vector
+//		l_previous_global_training_sets_digested = l_param_vector_training_sets_digested;
+//
+//	}
 
-	const size_t X_UNITS = 3;
-	const size_t COMPUTATIONAL_UNITS = 128;
-	const size_t Y_UNITS = 10;
-
-	const size_t LSTM_STACK_HEIGHT = 3;
-
-	const size_t MAXIMUM_TIMESTEPS = 200;
-
-	aurora::models::Sync l_start_sync(new aurora::models::sync(aurora::pseudo::tnn({ X_UNITS, COMPUTATIONAL_UNITS }, aurora::pseudo::nlr(0.3))));
-	aurora::models::Stacked_recurrent l_lstm_stack(aurora::pseudo::lstm_stacked(COMPUTATIONAL_UNITS, LSTM_STACK_HEIGHT));
-	aurora::models::Sync l_end_sync(new aurora::models::sync(aurora::pseudo::tnn({ COMPUTATIONAL_UNITS, Y_UNITS }, aurora::pseudo::nsm())));
-
-	aurora::models::Stacked_recurrent l_full_stack(new aurora::models::stacked_recurrent({ l_start_sync, l_lstm_stack, l_end_sync }));
-
-	l_full_stack->param_recur(aurora::pseudo::param_init(new aurora::params::param_mom(0.02, 0.9), l_param_vector));
-	l_full_stack->prep(MAXIMUM_TIMESTEPS);
-
-	aurora::models::Mse_loss l_mse_loss(new aurora::models::mse_loss(l_full_stack));
-
-	l_mse_loss->compile();
-
-	uint64_t l_param_vector_training_sets_digested = 0;
-
-	// Read / randomly initialize parameters
-	{
-		aurora::maths::tensor l_param_vector_tensor;
-
-		if (affix_base::files::file_read("config/param_vector_tensor.bin", l_param_vector_tensor) &&
-			affix_base::files::file_read("config/param_vector_training_sets_digested.bin", l_param_vector_training_sets_digested) &&
-			l_param_vector.size() == l_param_vector_tensor.size())
-		{
-			l_param_vector.pop(l_param_vector_tensor);
-		}
-		else
-		{
-			l_param_vector.rand_norm();
-		}
-	}
-
-	trainer l_trainer(4, 0.02);
-
-	size_t l_previous_global_training_sets_digested = 0;
-
-	for (int epoch = 0; true; epoch++)
-	{
-		// Stopwatch for timing the ENTIRE epoch.
-		affix_base::timing::stopwatch l_epoch_stopwatch;
-
-		// Start the stopwatch
-		l_epoch_stopwatch.start();
-		
-		double l_cost = 0;
-
-		// Stopwatch for the training session inside this epoch.
-		affix_base::timing::stopwatch l_training_stopwatch;
-
-		// Start the training session stopwatch.
-		l_training_stopwatch.start();
-		
-		size_t l_training_sets_to_digest = l_trainer.training_sets_to_digest_count();
-
-		for (int i = 0; i < l_training_sets_to_digest; i++)
-		{
-			// GET A TRAINING SET FROM DISK
-			aurora::maths::tensor l_x;
-			aurora::maths::tensor l_y;
-
-			if (!get_random_training_set_from_disk(l_x, l_y))
-			{
-				std::cout << "Unable to get training set from disk." << std::endl;
-				break;
-			}
-
-			// TRAIN (CYCLE) THE TRAINING SET
-			l_cost += l_mse_loss->cycle(l_x, l_y);
-
-		}
-
-		l_trainer.synchronize(l_param_vector, l_param_vector_training_sets_digested, l_training_sets_to_digest);
-
-		affix_base::files::file_write("config/param_vector_tensor.bin", (aurora::maths::tensor)l_param_vector);
-		affix_base::files::file_write("config/param_vector_training_sets_digested.bin", l_param_vector_training_sets_digested);
-
-		if (epoch % 100 == 0 && epoch != 0)
-		{
-			double l_epoch_period_in_ms = l_epoch_stopwatch.duration_milliseconds();
-			double l_training_period_in_ms = l_training_stopwatch.duration_milliseconds();
-			double l_synchronizing_period_in_ms = l_epoch_period_in_ms - l_training_period_in_ms;
-			double l_last_epoch_global_digest = l_param_vector_training_sets_digested - l_previous_global_training_sets_digested;
-			double l_last_epoch_global_digest_rate_in_ts_per_s = l_last_epoch_global_digest / l_epoch_period_in_ms * 1000.0;
-			
-			std::cout << "ALL TIME GLOBAL DIGEST               : " << l_param_vector_training_sets_digested << std::endl;
-			std::cout << "LAST EPOCH LOCAL DIGEST              : " << l_training_sets_to_digest << std::endl;
-			std::cout << "LAST EPOCH GLOBAL DIGEST             : " << l_last_epoch_global_digest << std::endl;
-			std::cout << "LAST EPOCH LOCAL COST                : " << l_cost << std::endl;
-			std::cout << "LAST EPOCH GLOBAL DIGEST RATE IN t/s : " << l_last_epoch_global_digest_rate_in_ts_per_s << std::endl;
-			std::cout << "LAST EPOCH TRAINING PERIOD IN ms     : " << l_epoch_period_in_ms << std::endl;
-			std::cout << "LAST EPOCH SYNCHRONIZING PERIOD IN ms: " << l_synchronizing_period_in_ms << std::endl;
-			std::cout << std::endl << std::endl;
-		}
-
-		// Save the current digest count for the parameter vector
-		l_previous_global_training_sets_digested = l_param_vector_training_sets_digested;
-
-	}
+	
 
 	return 0;
 
