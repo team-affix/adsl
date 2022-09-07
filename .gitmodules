@@ -4,3 +4,6 @@
 [submodule "affix-services"]
 	path = affix-services
 	url = git@github.com:team-affix/affix-services.git
+[submodule "aurora-v4"]
+	path = aurora-v4
+	url = git@github.com:team-affix/aurora-v4.git
