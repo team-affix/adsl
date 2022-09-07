@@ -13,9 +13,12 @@ int main(
 {
 	asio::io_context l_io_context;
 
-	affix_base::data::ptr<affix_services::client_configuration> l_client_configuration = new affix_services::client_configuration("");
+	affix_services::client l_client(l_io_context, "config/client_configuration.json");
 
-	affix_services::client l_client(l_io_context, new affix_services::client_configuration(""));
+	affix_services::agent<std::string, double> l_agent(l_client, "adsl-example-agent", 1);
+
+
+
 
 	return 0;
 

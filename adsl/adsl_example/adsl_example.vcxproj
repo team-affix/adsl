@@ -95,12 +95,12 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>../../affix-services/affix-services/$(Configuration)/affix-services.lib;../../affix-services/affix-services/$(Configuration)/affix-base.lib;../../affix-base/$(Configuration)/affix-base.lib;../../affix-base/cryptopp/$(Platform)/Output/$(Configuration)/cryptlib.lib;../../aurora-v4/$(Configuration)/aurora-v4.lib;../../aurora-v4/$(Configuration)/affix-base.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>../../affix-services/affix-services/$(Configuration)/affix-services.lib;../../affix-services/affix-services/$(Configuration)/affix-base.lib;../../affix-base/$(Configuration)/affix-base.lib;../../affix-base/cryptopp/$(Platform)/Output/$(Configuration)/cryptlib.lib;../../aurora-v4/aurora-v4/$(Configuration)/aurora-v4.lib;../../aurora-v4/aurora-v4/$(Configuration)/affix-base.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
       <Command>msbuild ../../affix-services/affix-services/affix-services.sln /p:Configuration=$(Configuration);Platform=$(PlatformShortName)
 msbuild ../../affix-base/affix-base.sln /p:Configuration=$(Configuration);Platform=$(PlatformShortName)
-msbuild ../../aurora-v4/aurora-v4.sln /p:Configuration=$(Configuration);Platform=$(PlatformShortName)</Command>
+msbuild ../../aurora-v4/aurora-v4/aurora-v4.sln /p:Configuration=$(Configuration);Platform=$(PlatformShortName)</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -120,12 +120,12 @@ msbuild ../../aurora-v4/aurora-v4.sln /p:Configuration=$(Configuration);Platform
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>../../affix-services/affix-services/$(Configuration)/affix-services.lib;../../affix-services/affix-services/$(Configuration)/affix-base.lib;../../affix-base/$(Configuration)/affix-base.lib;../../affix-base/cryptopp/$(Platform)/Output/$(Configuration)/cryptlib.lib;../../aurora-v4/$(Configuration)/aurora-v4.lib;../../aurora-v4/$(Configuration)/affix-base.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>../../affix-services/affix-services/$(Configuration)/affix-services.lib;../../affix-services/affix-services/$(Configuration)/affix-base.lib;../../affix-base/$(Configuration)/affix-base.lib;../../affix-base/cryptopp/$(Platform)/Output/$(Configuration)/cryptlib.lib;../../aurora-v4/aurora-v4/$(Configuration)/aurora-v4.lib;../../aurora-v4/aurora-v4/$(Configuration)/affix-base.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
       <Command>msbuild ../../affix-services/affix-services/affix-services.sln /p:Configuration=$(Configuration);Platform=$(PlatformShortName)
 msbuild ../../affix-base/affix-base.sln /p:Configuration=$(Configuration);Platform=$(PlatformShortName)
-msbuild ../../aurora-v4/aurora-v4.sln /p:Configuration=$(Configuration);Platform=$(PlatformShortName)</Command>
+msbuild ../../aurora-v4/aurora-v4/aurora-v4.sln /p:Configuration=$(Configuration);Platform=$(PlatformShortName)</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -141,12 +141,12 @@ msbuild ../../aurora-v4/aurora-v4.sln /p:Configuration=$(Configuration);Platform
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>../../affix-services/affix-services/$(Platform)/$(Configuration)/affix-services.lib;../../affix-services/affix-services/$(Platform)/$(Configuration)/affix-base.lib;../../affix-base/$(Platform)/$(Configuration)/affix-base.lib;../../affix-base/cryptopp/$(Platform)/Output/$(Configuration)/cryptlib.lib;../../aurora-v4/$(Platform)/$(Configuration)/aurora-v4.lib;../../aurora-v4/$(Platform)/$(Configuration)/affix-base.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>../../affix-services/affix-services/$(Platform)/$(Configuration)/affix-services.lib;../../affix-services/affix-services/$(Platform)/$(Configuration)/affix-base.lib;../../affix-base/$(Platform)/$(Configuration)/affix-base.lib;../../affix-base/cryptopp/$(Platform)/Output/$(Configuration)/cryptlib.lib;../../aurora-v4/aurora-v4/$(Platform)/$(Configuration)/aurora-v4.lib;../../aurora-v4/aurora-v4/$(Platform)/$(Configuration)/affix-base.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
       <Command>msbuild ../../affix-services/affix-services/affix-services.sln /p:Configuration=$(Configuration);Platform=$(PlatformShortName)
 msbuild ../../affix-base/affix-base.sln /p:Configuration=$(Configuration);Platform=$(PlatformShortName)
-msbuild ../../aurora-v4/aurora-v4.sln /p:Configuration=$(Configuration);Platform=$(PlatformShortName)</Command>
+msbuild ../../aurora-v4/aurora-v4/aurora-v4.sln /p:Configuration=$(Configuration);Platform=$(PlatformShortName)</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -166,12 +166,12 @@ msbuild ../../aurora-v4/aurora-v4.sln /p:Configuration=$(Configuration);Platform
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>../../affix-services/affix-services/$(Platform)/$(Configuration)/affix-services.lib;../../affix-services/affix-services/$(Platform)/$(Configuration)/affix-base.lib;../../affix-base/$(Platform)/$(Configuration)/affix-base.lib;../../affix-base/cryptopp/$(Platform)/Output/$(Configuration)/cryptlib.lib;../../aurora-v4/$(Platform)/$(Configuration)/aurora-v4.lib;../../aurora-v4/$(Platform)/$(Configuration)/affix-base.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>../../affix-services/affix-services/$(Platform)/$(Configuration)/affix-services.lib;../../affix-services/affix-services/$(Platform)/$(Configuration)/affix-base.lib;../../affix-base/$(Platform)/$(Configuration)/affix-base.lib;../../affix-base/cryptopp/$(Platform)/Output/$(Configuration)/cryptlib.lib;../../aurora-v4/aurora-v4/$(Platform)/$(Configuration)/aurora-v4.lib;../../aurora-v4/aurora-v4/$(Platform)/$(Configuration)/affix-base.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
       <Command>msbuild ../../affix-services/affix-services/affix-services.sln /p:Configuration=$(Configuration);Platform=$(PlatformShortName)
 msbuild ../../affix-base/affix-base.sln /p:Configuration=$(Configuration);Platform=$(PlatformShortName)
-msbuild ../../aurora-v4/aurora-v4.sln /p:Configuration=$(Configuration);Platform=$(PlatformShortName)</Command>
+msbuild ../../aurora-v4/aurora-v4/aurora-v4.sln /p:Configuration=$(Configuration);Platform=$(PlatformShortName)</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
